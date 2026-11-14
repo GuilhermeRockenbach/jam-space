@@ -4,13 +4,28 @@ Guia para quem vai pegar o projeto no próprio computador. Prazo do desafio: **1
 
 Resumo do projeto, impacto e roteiro: [RESUMO.md](RESUMO.md). Fontes e o que foi conferido: [REFERENCIAS.md](REFERENCIAS.md). Texto do desafio: [earth-jukebox-briefing.md](earth-jukebox-briefing.md) e [requisitos.md](requisitos.md).
 
+## 0. Acesso ao repositório
+
+O repositório é privado: https://github.com/GuilhermeRockenbach/jam-space. Peça ao Guilherme o convite (Settings → Collaborators) e aceite pelo e-mail do GitHub. Depois disso você consegue clonar e enviar alterações.
+
+Para enviar o que mudou:
+
+```bash
+git pull
+git add -A
+git commit -m "o que você mudou"
+git push
+```
+
+Sempre rode `git pull` antes de começar, para não brigar com a mudança de outra pessoa.
+
 ## 1. Rodar o site
 
 O site é estático (HTML, CSS e JavaScript puros, sem build). O three.js vem de CDN, então precisa de internet.
 
 ```bash
-git clone <url-do-repositorio>
-cd <pasta-do-repositorio>
+git clone https://github.com/GuilhermeRockenbach/jam-space.git
+cd jam-space
 python -m http.server 5180
 ```
 
