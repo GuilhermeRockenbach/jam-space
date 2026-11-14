@@ -6,7 +6,7 @@ Resumo do projeto, impacto e roteiro: [RESUMO.md](RESUMO.md). Fontes e o que foi
 
 ## 0. Acesso ao repositório
 
-O repositório é privado: https://github.com/GuilhermeRockenbach/jam-space. Peça ao Guilherme o convite (Settings → Collaborators) e aceite pelo e-mail do GitHub. Depois disso você consegue clonar e enviar alterações.
+O repositório é público: https://github.com/GuilhermeRockenbach/jam-space. Qualquer pessoa consegue ver e clonar. Para **enviar** alterações (`git push`), peça ao Guilherme um convite de colaborador (Settings → Collaborators) e aceite pelo e-mail do GitHub. Sem convite, dá para fazer um fork e abrir um pull request.
 
 Para enviar o que mudou:
 
