@@ -1,0 +1,17 @@
+# Downloads grandes da NASA (cerca de 540 MB); veja COMO-CONTINUAR.md para baixar de novo
+fontes-nasa/videos/
+fontes-nasa/chuva/
+fontes-nasa/gelo/
+fontes-nasa/temp/
+
+# Gerado por ferramentas/montar-artefato.py
+publicar/
+
+# Arquivos do sistema
+nul
+Thumbs.db
+.DS_Store
+node_modules/
+__pycache__/
+*.tmp
+~$*

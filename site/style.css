@@ -1,0 +1,372 @@
+:root {
+  --ceu: #0a1030;          /* céu orbital, igual ao fundo da cena 3D */
+  --texto: #eef1ff;
+  --suave: #aab4dd;
+  --sol: #ffc85c;           /* luz do sol na borda da Terra: o play */
+  --sol-texto: #1f1400;
+  --foco: #ffe27a;
+  --linha: rgba(170, 180, 221, 0.28);
+  --titulo: "Unbounded", system-ui, sans-serif;
+  --corpo: "Atkinson Hyperlegible", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden;
+  background: var(--ceu); color: var(--texto);
+  font: 1rem/1.45 var(--corpo);
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 3px solid var(--foco); outline-offset: 3px; }
+p { margin: 0; }
+
+/* ---------- Uma tela só: o disco é a página ---------- */
+.app {
+  height: 100vh; height: 100dvh;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+  gap: 4px;
+}
+
+.marca { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.marca h1 { margin: 0; font: 700 clamp(1.25rem, 2.6vw + 0.5rem, 1.75rem)/1.1 var(--titulo); letter-spacing: -0.01em; }
+.botoes-topo { display: flex; gap: 8px; flex: none; }
+.botao-icone {
+  flex: none; width: 44px; height: 44px; border-radius: 50%;
+  border: 1.5px solid var(--linha); background: transparent; color: var(--texto); cursor: pointer;
+  display: grid; place-items: center;
+}
+.botao-icone:hover { border-color: var(--suave); }
+.botao-icone svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+/* Palco: canvas 3D, temas nos cantos, play no centro */
+.palco { position: relative; min-height: 0; margin-inline: -16px; }
+.palco canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  -webkit-mask-image: radial-gradient(50% 50% at 50% 50%, #000 72%, transparent 100%);
+  mask-image: radial-gradient(50% 50% at 50% 50%, #000 72%, transparent 100%);
+}
+/* Alvo de soltura: aparece enquanto um tema é arrastado */
+.palco::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: var(--alvo, 60vmin); aspect-ratio: 1;
+  transform: translate(-50%, -50%) scale(0.96); border-radius: 50%;
+  border: 3px dashed var(--sol); opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s;
+}
+.palco.arrastando::after { opacity: 0.55; }
+.palco.sobre::after { opacity: 1; transform: translate(-50%, -50%) scale(1); background: rgba(255, 200, 92, 0.08); }
+
+.prateleira { position: absolute; inset: 8px 16px; pointer-events: none; }
+.camada {
+  position: absolute; pointer-events: auto; touch-action: none; user-select: none;
+  display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 14px 6px 6px;
+  border-radius: 999px; border: 1.5px solid var(--linha);
+  background: rgba(10, 16, 48, 0.82); color: var(--texto);
+  font: 700 0.95rem/1.1 var(--corpo); cursor: grab;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s, opacity 0.2s;
+}
+.camada[data-id="temp"]  { left: 0; top: 0; }
+.camada[data-id="raios"] { right: 0; top: 0; }
+.camada[data-id="luzes"] { left: 0; bottom: 0; }
+.camada[data-id="gelo"]  { right: 0; bottom: 0; }
+.camada[data-id="chuva"] { left: 0; right: 0; top: 0; margin-inline: auto; width: fit-content; }
+.camada:hover { border-color: var(--suave); }
+.camada .disco-mini {
+  width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: #12162b; border: 2px solid var(--cor); transition: background 0.25s;
+}
+.camada svg { width: 20px; height: 20px; stroke: var(--cor); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.camada .estado { display: block; font-weight: 400; font-size: 0.8rem; color: var(--suave); }
+.camada[aria-pressed="true"] { border-color: var(--cor); background: color-mix(in srgb, var(--cor) 16%, rgba(10, 16, 48, 0.85)); }
+.camada[aria-pressed="true"] .disco-mini { background: var(--cor); }
+.camada[aria-pressed="true"] svg { stroke: #0a1030; }
+.camada.levantada { opacity: 0.35; }
+/* Cópia que segue o dedo/mouse */
+.fantasma { position: fixed; z-index: 10; pointer-events: none; transform: translate(-50%, -50%) scale(1.08); cursor: grabbing; }
+
+.dica {
+  position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%);
+  color: var(--suave); font-size: 0.95rem; text-align: center; pointer-events: none; transition: opacity 0.3s;
+}
+.dica.some { opacity: 0; }
+
+.play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: clamp(60px, 13vmin, 100px); aspect-ratio: 1; border-radius: 50%;
+  border: 0; background: var(--sol); color: var(--sol-texto); cursor: pointer;
+  display: grid; place-items: center;
+  box-shadow: 0 0 0 6px rgba(255, 200, 92, 0.18), 0 10px 30px rgba(0, 0, 0, 0.45);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+.play svg { width: 42%; height: 42%; fill: currentColor; }
+.play .icone-pausa { display: none; }
+.play.tocando .icone-play { display: none; }
+.play.tocando .icone-pausa { display: block; }
+.play:not(:disabled):hover { transform: translate(-50%, -50%) scale(1.06); }
+/* Tocando: o botão encolhe para deixar o Ártico (e o gelo) à vista */
+.play.tocando { width: clamp(44px, 8vmin, 64px); opacity: 0.88; transition: width 0.3s ease, transform 0.2s ease, opacity 0.2s ease; }
+.play:disabled { opacity: 0; pointer-events: none; }
+.play:focus-visible { outline: 4px solid var(--foco); outline-offset: 6px; }
+.sem-3d { position: absolute; inset: auto 16px 16px; text-align: center; color: var(--suave); }
+
+/* Faixa de baixo: o que está tocando e um único controle de tempo */
+.painel { display: grid; gap: 8px; width: 100%; max-width: 560px; margin: 0 auto; }
+.receita { text-align: center; }
+.receita-titulo { margin: 0; font: 700 1.15rem/1.25 var(--corpo); }
+.receita-sub { margin-top: 2px; color: var(--suave); font-size: 1rem; min-height: 1.4em; }
+.receita.mudou .receita-sub { color: var(--sol); animation: destaque 0.6s ease; }
+@keyframes destaque { from { opacity: 0.2; } to { opacity: 1; } }
+.tocando { display: grid; gap: 6px; }
+.tocando-topo { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px; }
+.ano { min-width: 4ch; font: 700 clamp(1.4rem, 3.6vh, 2rem)/1.1 var(--titulo); font-variant-numeric: tabular-nums; }
+.chip-ajustes {
+  justify-self: center; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 16px;
+  border-radius: 999px; border: 1.5px solid var(--linha); background: transparent; color: var(--texto); cursor: pointer;
+}
+.chip-ajustes:hover { border-color: var(--suave); }
+.chip-ajustes svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.linha-chip { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.chip-monitor svg { stroke-linecap: round; stroke-width: 2.2; }
+.chip-monitor[aria-expanded="true"] { border-color: var(--sol); color: var(--sol); }
+
+.medidores { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 3px; min-height: 1.4em; }
+.medidores li { display: grid; grid-template-columns: 1.2em 7.5em 1fr auto; align-items: center; gap: 8px; font-size: 0.95rem; }
+.m-icone { width: 1.2em; height: 1.2em; fill: none; stroke: var(--cor); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.m-nome { color: var(--cor); font-weight: 700; }
+.m-barra { height: 9px; border-radius: 3px; background: rgba(170, 180, 221, 0.18); overflow: hidden; }
+.m-barra i { display: block; height: 100%; background: var(--cor); border-radius: 3px; transition: width 0.5s ease; }
+/* Cada camada tem também um padrão, para não depender só da cor */
+.m-raios .m-barra i { background: repeating-linear-gradient(135deg, var(--cor) 0 4px, transparent 4px 7px); }
+.m-luzes .m-barra i { background: radial-gradient(circle, var(--cor) 1.6px, transparent 2px) 0 50% / 6px 9px repeat-x, rgba(247, 243, 176, 0.25); }
+.m-chuva .m-barra i { background: repeating-linear-gradient(0deg, var(--cor) 0 2px, transparent 2px 4px); }
+.m-gelo .m-barra i { background: repeating-linear-gradient(90deg, var(--cor) 0 6px, transparent 6px 8px); }
+.m-valor { font-variant-numeric: tabular-nums; min-width: 5.2ch; text-align: right; }
+.m-legenda { grid-column: 2 / -1; margin-top: -4px; color: var(--suave); font-size: 0.8rem; line-height: 1.3; }
+.medidores { gap: 8px; }
+#linha { width: 100%; accent-color: var(--sol); height: 26px; margin: 0; }
+#linha:disabled { opacity: 0.35; }
+
+label { display: grid; gap: 2px; color: var(--suave); font-size: 0.92rem; }
+select, button { font: inherit; }
+select {
+  min-height: 44px; width: 100%; padding: 6px 10px; border-radius: 12px; border: 1.5px solid var(--linha);
+  background: rgba(10, 16, 48, 0.7); color: var(--texto); font-size: 0.98rem;
+}
+select:disabled { opacity: 0.45; }
+
+/* Modo de ouvir: dois botões de rádio lado a lado, como uma chave */
+.modo { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.modo label {
+  position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 44px;
+  padding: 6px 12px; border-radius: 12px; border: 1.5px solid var(--linha); cursor: pointer;
+  color: var(--texto); font-size: 0.92rem; line-height: 1.2;
+}
+.modo input { position: absolute; opacity: 0; pointer-events: none; }
+.modo-ajuda { color: var(--suave); font-size: 0.875rem; }
+.modo label:has(input:checked) { border-color: var(--sol); background: rgba(255, 200, 92, 0.12); }
+.modo label:has(input:focus-visible) { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+.nota { color: var(--suave); font-size: 0.875rem; text-align: center; }
+/* ---------- Janela de opções ---------- */
+.opcoes {
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto;
+  border: 1.5px solid var(--linha); border-radius: 20px; padding: 22px;
+  background: #0f1740; color: var(--texto);
+}
+.opcoes::backdrop { background: rgba(4, 6, 20, 0.7); }
+.opcoes[open] { display: grid; gap: 14px; }
+.opcoes h2 { margin: 0; font: 700 1.2rem/1.2 var(--titulo); }
+.descricao { color: var(--suave); }
+.linha-botoes { display: flex; flex-wrap: wrap; gap: 10px; }
+.linha-botoes button, .fechar {
+  min-height: 44px; padding: 8px 16px; border-radius: 12px; border: 1.5px solid var(--linha);
+  background: transparent; color: var(--texto); cursor: pointer;
+}
+.linha-botoes button:hover { border-color: var(--suave); }
+.fechar { justify-self: end; background: var(--sol); color: var(--sol-texto); border-color: var(--sol); font-weight: 700; }
+label.check { display: flex; gap: 10px; align-items: flex-start; color: var(--texto); font-size: 1rem; }
+label.check input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--sol); }
+.opcoes .nota { text-align: left; font-size: 0.95rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+@media (forced-colors: active) {
+  .camada[aria-pressed="true"] { border: 4px solid Highlight; }
+  .play { border: 3px solid ButtonText; }
+}
+
+/* ---------- Botões do topo e painel "Como funciona" ---------- */
+.botoes-topo { display: flex; gap: 8px; flex: none; }
+.info { width: min(760px, calc(100vw - 32px)); }
+.info[open] { display: block; }
+.info > * + * { margin-top: 12px; }
+.info h3 { margin: 22px 0 0; font: 700 1.1rem/1.3 var(--corpo); }
+.info p, .info li { color: var(--texto); max-width: 70ch; }
+.info table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+.info th, .info td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--linha); }
+.info thead th { color: var(--suave); font-weight: 700; }
+.info tbody th { white-space: nowrap; }
+.info td:last-child { color: var(--suave); }
+.info ul { padding-left: 20px; margin-bottom: 0; }
+.info .refs li { margin-top: 6px; font-size: 1rem; }
+.info a { color: var(--sol); }
+.info .fechar { display: block; margin: 20px 0 0 auto; }
+@media (max-width: 560px) {
+  .info table, .info thead, .info tbody, .info tr, .info th, .info td { display: block; }
+  .info thead { display: none; }
+  .info tr { padding: 8px 0; border-bottom: 1px solid var(--linha); }
+  .info th, .info td { border: 0; padding: 2px 0; }
+}
+
+.ajustes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+@media (max-width: 560px) {
+  .camada { padding: 4px; min-height: 0; }
+  .camada .rotulo { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .camada .disco-mini { width: 44px; height: 44px; }
+  .medidores li { grid-template-columns: 1.1em 1fr auto; }
+  .m-nome { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+@media (forced-colors: active) {
+  .camada[aria-pressed="true"] { border: 4px solid Highlight; }
+  .play { border: 3px solid ButtonText; }
+}
+
+/* ---------- Zoom alto ou letra grande (WCAG 1.4.4 e 1.4.10) ----------
+   Com zoom de 200% a tela "encolhe" para menos de ~480px de altura:
+   a regra de tela única deixa de valer e a página rola. */
+@media (max-height: 480px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100dvh; grid-template-rows: auto 90vh auto; }
+}
+
+/* Atalhos de teclado (janela de acessibilidade) */
+.atalhos-titulo { margin: 4px 0 0; font: 700 1.05rem/1.3 var(--corpo); }
+.atalhos { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+kbd {
+  display: inline-block; min-width: 1.8em; padding: 1px 6px; border-radius: 6px; text-align: center;
+  border: 1.5px solid var(--linha); border-bottom-width: 3px; font: 700 0.9rem/1.4 var(--corpo); color: var(--texto);
+}
+
+/* ---------- Computador (tela larga): disco à esquerda, painel à direita ----------
+   Os temas ficam nos cantos de um quadrado do tamanho do disco, e não nos cantos da
+   tela, para não sobrar espaço vazio entre eles e o disco. */
+.palco { container-type: size; }
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  .app {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "marca marca" "palco painel";
+    column-gap: 32px;
+    padding-inline: max(32px, env(safe-area-inset-left, 0px)) max(40px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 28px;
+  }
+  .marca { grid-area: marca; }
+  .palco { grid-area: palco; margin: 0; }
+  .prateleira {
+    inset: auto; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(100cqw, 104cqh); height: min(84cqh, 80cqw);
+  }
+  .painel {
+    grid-area: painel; align-self: center; max-width: none; margin: 0; gap: 18px;
+    padding: 24px; border: 1.5px solid var(--linha); border-radius: 24px;
+    background: rgba(10, 16, 48, 0.55);
+  }
+  .receita { text-align: left; }
+  .receita-titulo { font-size: 1.3rem; }
+  .tocando { gap: 12px; }
+  .tocando-topo { grid-template-columns: 1fr; gap: 10px; }
+  .ano { font-size: 2.6rem; }
+  .chip-ajustes { justify-self: stretch; justify-content: space-between; }
+  .linha-chip { flex-wrap: nowrap; }
+  .linha-chip #abrir-disco { flex: 1; }
+  .dica { bottom: 6%; }
+}
+
+/* ---------- Monitor do som ----------
+   Telas largas: coluna fixa à esquerda. Telas menores e celular: painel que sobe
+   de baixo pelo botão "Monitor", sem parar a música. */
+.monitor { display: none; }
+.mon-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mon-fechar { min-height: 40px; padding: 6px 14px; }
+.monitor.aberto {
+  display: grid; gap: 10px; position: fixed; z-index: 30;
+  left: 0; right: 0; bottom: 0; max-height: 72dvh; overflow: auto;
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: #0f1740; border-top: 1.5px solid var(--linha); border-radius: 20px 20px 0 0;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+}
+.monitor.aberto canvas { height: 130px; }
+@media (min-width: 640px) {
+  .monitor.aberto { left: 16px; right: auto; bottom: 16px; width: 360px; border: 1.5px solid var(--linha); border-radius: 20px; }
+}
+@media (min-width: 1180px) and (min-aspect-ratio: 5/4) {
+  .app {
+    grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(320px, 400px);
+    grid-template-areas: "marca marca marca" "monitor palco painel";
+  }
+  .chip-monitor, .mon-fechar { display: none; }
+  .monitor, .monitor.aberto {
+    grid-area: monitor; align-self: center; display: grid; gap: 12px; min-width: 0;
+    position: static; max-height: none; overflow: visible; width: auto; box-shadow: none;
+    padding: 20px; border: 1.5px solid var(--linha); border-radius: 24px; background: rgba(10, 16, 48, 0.55);
+  }
+}
+.monitor h2 { margin: 0; font: 700 1rem/1.2 var(--titulo); }
+.monitor canvas { width: 100%; height: 150px; display: block; }
+.mon-temas { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.8rem; color: var(--suave); }
+.mon-temas li { display: flex; gap: 6px; align-items: baseline; }
+.mon-temas i { flex: none; width: 12px; height: 4px; border-radius: 2px; background: var(--cor); transform: translateY(-2px); }
+.mon-temas .vazio { display: block; }
+.mon-leituras { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.mon-leituras dt { color: var(--suave); font-size: 0.75rem; }
+.mon-leituras dd { margin: 0; font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.mon-volume { grid-column: 1 / -1; }
+.mon-volume dd { display: flex; align-items: center; gap: 8px; }
+.mon-barra { flex: 1; height: 8px; border-radius: 4px; background: rgba(170, 180, 221, 0.18); overflow: hidden; }
+.mon-barra i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8fd8ff, #ffc85c 70%, #ff8a5c); }
+
+/* ---------- Botão e painel "Aprenda a ouvir" ---------- */
+.botao-ouvir {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px;
+  border-radius: 999px; border: 1.5px solid var(--sol); background: transparent; color: var(--sol);
+  font: 700 0.95rem/1 var(--corpo); cursor: pointer;
+}
+.botao-ouvir:hover { background: rgba(255, 200, 92, 0.12); }
+.botao-ouvir svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+@media (max-width: 420px) { .botao-ouvir { padding: 0 10px 0 8px; gap: 5px; font-size: 0.8rem; } .botao-ouvir svg { width: 18px; height: 18px; } .botoes-topo { gap: 6px; } }
+.ouvir .licao { border-top: 1px solid var(--linha); padding-top: 4px; }
+.ouvir .licao + .licao { margin-top: 14px; }
+.ouvir .linha-botoes { margin-top: 10px; }
+.ouvir button[data-licao], .ouvir button[data-amostra] { font: 700 1rem/1.2 var(--corpo); }
+.ouvir .quem { list-style: none; padding: 0; display: grid; gap: 10px; }
+.ouvir .quem li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.ouvir .quem button { min-height: 44px; padding: 8px 14px; border-radius: 12px; border: 1.5px solid var(--linha); background: transparent; color: var(--texto); cursor: pointer; }
+.ouvir button.tocando { background: var(--sol); color: var(--sol-texto); border-color: var(--sol); }
+
+/* Telas largas e baixas (notebook 1280×720): painel mais compacto para caber */
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) and (max-height: 760px) {
+  .painel { padding: 18px 20px; gap: 12px; }
+  .tocando { gap: 8px; }
+  .ano { font-size: 2.1rem; }
+  .medidores { gap: 5px; }
+  .monitor canvas { height: 120px; }
+}
+
+/* Celular: com 3 temas ou mais, as legendas dos medidores somem para o disco não encolher
+   (o texto completo continua na narração e no leitor de tela); o botão Monitor vira só ícone */
+@media (max-width: 560px) {
+  .medidores[data-n="3"] .m-legenda, .medidores[data-n="4"] .m-legenda, .medidores[data-n="5"] .m-legenda { display: none; }
+  .linha-chip { flex-wrap: nowrap; }
+  .chip-monitor { padding: 6px 14px; }
+  .chip-monitor span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}

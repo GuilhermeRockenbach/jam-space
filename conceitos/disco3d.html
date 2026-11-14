@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jam Space, conceitos do disco 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Unbounded:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; background: #070b22; color: #eef1ff; font-family: "Atkinson Hyperlegible", system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  .ui { position: fixed; left: 24px; top: 20px; max-width: 420px; }
+  .ui h1 { margin: 0 0 4px; font: 700 22px/1.2 "Unbounded", sans-serif; }
+  .ui p { margin: 0; color: #aab4dd; font-size: 15px; line-height: 1.45; }
+  .botoes { position: fixed; right: 24px; top: 20px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .botoes button { min-height: 40px; padding: 6px 14px; border-radius: 999px; border: 1.5px solid rgba(170,180,221,.35); background: rgba(10,16,48,.6); color: #eef1ff; font: 700 14px "Atkinson Hyperlegible", sans-serif; cursor: pointer; }
+  .botoes button[aria-pressed="true"] { border-color: #ffc85c; color: #ffc85c; }
+  .fonte { position: fixed; left: 24px; bottom: 16px; color: #7f89b5; font-size: 12px; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="ui"><h1 id="titulo"></h1><p id="texto"></p></div>
+<div class="botoes">
+  <button data-c="1">1. Planeta no vinil</button>
+  <button data-c="2">2. Globo de vidro</button>
+  <button data-c="3">3. Corte do disco</button>
+  <button id="gelo">Gelo: maior mês</button>
+</div>
+<p class="fonte">Terra e mar: máscara tirada do Blue Marble das imagens do NASA SVS 5149. Gelo marinho: área lida no SVS 5099. Relevo estilizado (sem dado de altitude).</p>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ---------- Dados ---------- */
+const mascara = await (await fetch('../fontes-nasa/mascara-terra.json')).json();
+const gelo = (await (await fetch('../site/dados/gelo.json')).json()).meses;
+const W = 360, H = 180;
+const terra = new Uint8Array(W * H);
+for (let i = 0; i < W * H; i++) terra[i] = mascara.terra[i] === '1' ? 1 : 0;
+
+// Distância até a costa (em graus), por busca em largura, com a longitude dando a volta
+function distancia(alvo) {
+  const d = new Float32Array(W * H).fill(1e9), fila = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x; if (terra[i] !== alvo) continue;
+    const viz = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+    if (viz.some(([a, b]) => b >= 0 && b < H && terra[b * W + ((a + W) % W)] !== alvo)) { d[i] = 0.5; fila.push(i); }
+  }
+  for (let k = 0; k < fila.length; k++) {
+    const i = fila[k], x = i % W, y = (i / W) | 0;
+    for (const [a, b] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+      if (b < 0 || b >= H) continue; const j = b * W + ((a + W) % W);
+      if (terra[j] === alvo && d[j] > d[i] + 1) { d[j] = d[i] + 1; fila.push(j); }
+    }
+  }
+  return d;
+}
+const dTerra = distancia(1), dMar = distancia(0);
+const sd = new Float32Array(W * H);
+for (let i = 0; i < W * H; i++) sd[i] = terra[i] ? Math.min(dTerra[i], 14) : -Math.min(dMar[i], 14);
+// suaviza um pouco para a costa não ficar em degraus
+const sd2 = new Float32Array(W * H);
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  let s = 0, n = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const b = y + dy; if (b < 0 || b >= H) continue; s += sd[b * W + ((x + dx + W) % W)]; n++; }
+  sd2[y * W + x] = s / n;
+}
+function amostra(lat, lon) {
+  const fy = (89.5 - lat), fx = (lon + 179.5);
+  const y0 = Math.max(0, Math.min(H - 1, Math.floor(fy))), y1 = Math.min(H - 1, y0 + 1), ty = Math.max(0, Math.min(1, fy - y0));
+  const x0 = ((Math.floor(fx) % W) + W) % W, x1 = (x0 + 1) % W, tx = fx - Math.floor(fx);
+  const a = sd2[y0 * W + x0], b = sd2[y0 * W + x1], c = sd2[y1 * W + x0], d = sd2[y1 * W + x1];
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+
+// Ruído para textura do relevo (só visual)
+function hash(x, y) { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); }
+function ruido(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const fbm = (x, y) => { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 5; i++) { s += a * ruido(x * f, y * f); f *= 2.07; a *= 0.5; } return s; };
+const crista = (x, y) => 1 - Math.abs(fbm(x, y) * 2 - 1);
+
+/* Calota de gelo marinho: área do mês (SVS 5099) → latitude da borda, A = 2πR²(1 − cos θ) */
+const AREA_TERRA_HEMI = 2 * Math.PI * 6371 * 6371 / 1e6; // milhões de km²
+const latGelo = mkm2 => 90 - Math.acos(1 - mkm2 / AREA_TERRA_HEMI) * 180 / Math.PI;
+const MAIOR = gelo.reduce((a, b) => b.mkm2 > a.mkm2 ? b : a), MENOR = gelo.reduce((a, b) => b.mkm2 < a.mkm2 ? b : a);
+let mesGelo = MAIOR;
+
+/* Superfície: dado lat/lon → altura (unidades da cena) e cor */
+const C = h => new THREE.Color(h);
+const COR = {
+  raso: C('#1f8fa0'), fundo: C('#0a2350'), abismo: C('#050d24'),
+  praia: C('#c9b27a'), verde: C('#3f7a4e'), floresta: C('#24502f'), seco: C('#b8873a'), rocha: C('#6b5d50'), neve: C('#f2f6fb'),
+  gelo: C('#e6f1fa'), geloAzul: C('#a9cbe6'), fenda: C('#5b86a8'),
+};
+const tmp = new THREE.Color();
+function superficie(lat, lon, escala, escMar = escala) {
+  const s = amostra(lat, lon);
+  const n = fbm(lon * 0.09 + 11, lat * 0.09 - 3), cr = crista(lon * 0.05, lat * 0.05);
+  const borda = bordaGelo(lon);
+  if (s > 0) { // terra
+    const interior = Math.min(1, s / 9);
+    let h = 0.012 + Math.pow(interior, 0.8) * (0.09 + 0.12 * cr) * (0.6 + 0.8 * n);
+    const polar = lat > 60 || lat < -62;
+    if (polar) h = 0.02 + 0.07 * Math.pow(interior, 0.6) + 0.01 * n; // mantos de gelo: domo liso (Groenlândia, Antártida)
+    const quenteSeco = Math.abs(lat) < 35 && Math.abs(lat) > 12 ? 0.6 : 0.15;
+    tmp.copy(COR.verde).lerp(COR.floresta, Math.max(0, 1 - Math.abs(lat) / 25) * 0.7).lerp(COR.seco, quenteSeco * n * 1.4);
+    if (s < 0.9) tmp.lerp(COR.praia, 0.5);
+    tmp.lerp(COR.rocha, Math.min(1, Math.max(0, (h - 0.1) * 8)));
+    if (polar) tmp.lerp(COR.neve, 0.92);
+    else if (h > 0.2 && Math.abs(lat) > 28) tmp.lerp(COR.neve, Math.min(0.9, (h - 0.2) * 10)); // neve só em montanhas fora dos trópicos
+    return { h: h * escala, cor: tmp.clone(), mar: false, gelo: polar };
+  }
+  const prof = Math.min(1, -s / 10);
+  tmp.copy(COR.raso).lerp(COR.fundo, Math.min(1, prof * 1.6)).lerp(COR.abismo, Math.max(0, prof - 0.6) * 2);
+  const h = (-0.012 - 0.05 * Math.pow(prof, 0.7)) * escMar / escala;
+  if (lat > borda && !PLACA) { // gelo marinho no globo: placa espessa com fendas
+    const f = crista(lon * 0.35, lat * 0.6);
+    tmp.copy(COR.gelo).lerp(COR.geloAzul, fbm(lon * 0.2, lat * 0.3) * 0.6);
+    if (f > 0.93) tmp.lerp(COR.fenda, 0.8);
+    return { h: (0.022 + 0.008 * fbm(lon * 0.3, lat * 0.3) - (f > 0.93 ? 0.012 : 0)) * Math.max(escala, escMar * 0.5), cor: tmp.clone(), mar: true, gelo: true };
+  }
+  return { h: h * escala, cor: tmp.clone(), mar: true, gelo: false, sobGelo: lat > borda };
+}
+let PLACA = false; // no disco, o gelo marinho é uma placa separada que flutua
+const bordaGelo = lon => latGelo(mesGelo.mkm2) + (fbm(lon * 0.08, 7.3) - 0.5) * 5;
+
+/* ---------- Cena ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.92;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#070b22');
+scene.fog = new THREE.Fog('#070b22', 12, 22);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.55;
+const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.05, 60);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = 1.45; controls.minDistance = 3; controls.maxDistance = 12;
+
+const sol = new THREE.DirectionalLight('#fff4e0', 2.6);
+sol.position.set(-4, 6, 3); sol.castShadow = true;
+sol.shadow.mapSize.set(4096, 4096); Object.assign(sol.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20 });
+sol.shadow.bias = -0.0004; sol.shadow.normalBias = 0.02;
+scene.add(sol, new THREE.HemisphereLight('#9fb8ff', '#1a1020', 0.5));
+const contra = new THREE.DirectionalLight('#6fa8ff', 1.2); contra.position.set(5, 2, -5); scene.add(contra);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.12, 0.4, 0.97));
+composer.addPass(new OutputPass());
+
+/* Textura de sulcos do vinil (relevo fino + brilho anisotrópico simulado) */
+function texturaSulcos() {
+  const c = document.createElement('canvas'); c.width = c.height = 2048;
+  const g = c.getContext('2d'), m = 1024;
+  g.fillStyle = '#808080'; g.fillRect(0, 0, 2048, 2048);
+  for (let r = 40; r < 1024; r += 2.2) {
+    g.strokeStyle = `rgba(${Math.random() < 0.5 ? 0 : 255},${0},${0},0)`;
+    const v = 100 + ((r * 7) % 13) * 6 + (Math.random() * 30);
+    g.strokeStyle = `rgb(${v},${v},${v})`; g.lineWidth = 1.1;
+    g.beginPath(); g.arc(m, m, r, 0, Math.PI * 2); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 8; return t;
+}
+const SULCOS = texturaSulcos();
+const matVinil = new THREE.MeshPhysicalMaterial({ color: '#07080c', roughness: 0.38, metalness: 0.0, clearcoat: 0.8, clearcoatRoughness: 0.22, bumpMap: SULCOS, bumpScale: 0.6, roughnessMap: SULCOS, envMapIntensity: 0.35 });
+const matBorda = new THREE.MeshStandardMaterial({ color: '#08090d', roughness: 0.45 });
+
+const R = 2.45, R0 = 0.1, R1 = 2.28;
+let BASE = -0.07, ESC = 0.75, ESC_MAR = 0.75;
+
+function vinil(theta = Math.PI * 2, inicio = 0) {
+  const g = new THREE.Group();
+  const corpo = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.1, 256, 1, false, inicio, theta), [matBorda, matVinil, matBorda]);
+  corpo.position.y = BASE - 0.05; corpo.castShadow = corpo.receiveShadow = true; g.add(corpo);
+  return g;
+}
+function prato() { // prato metálico e base do toca-discos
+  const g = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: '#9aa3b8', metalness: 1, roughness: 0.28 });
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.04, R * 1.04, 0.08, 256), metal);
+  p.position.y = BASE - 0.15; p.receiveShadow = true; g.add(p);
+  const pontos = new THREE.Mesh(new THREE.TorusGeometry(R * 1.04, 0.012, 8, 256), new THREE.MeshStandardMaterial({ color: '#ffc85c', emissive: '#ffc85c', emissiveIntensity: 0.6 }));
+  pontos.rotation.x = Math.PI / 2; pontos.position.y = BASE - 0.11; g.add(pontos);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.3, 5.6), new THREE.MeshStandardMaterial({ color: '#141a35', roughness: 0.6, metalness: 0.2 }));
+  base.position.set(0.55, BASE - 0.36, 0); base.receiveShadow = true; g.add(base);
+  return g;
+}
+function braco() {
+  const g = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: '#c7ccd8', metalness: 1, roughness: 0.22 });
+  const y = BASE + 0.32, pivo = new THREE.Vector3(3.05, y, -1.7), ponta = new THREE.Vector3(1.55, BASE + 0.16, 1.15);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.5, 48), metal); base.position.set(pivo.x, BASE + 0.02, pivo.z); g.add(base);
+  const tubo = (de, ate, raio) => {
+    const d = ate.clone().sub(de), m = new THREE.Mesh(new THREE.CylinderGeometry(raio, raio, d.length(), 24), metal);
+    m.position.copy(de).add(ate).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
+  };
+  const cotovelo = new THREE.Vector3(2.0, y - 0.04, 0.55);
+  g.add(tubo(pivo, cotovelo, 0.035), tubo(cotovelo, ponta, 0.03));
+  const contrapeso = tubo(pivo.clone().add(new THREE.Vector3(0.25, 0, -0.45)), pivo.clone().add(new THREE.Vector3(0.12, 0, -0.22)), 0.13); g.add(contrapeso);
+  const cabeca = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.36), new THREE.MeshStandardMaterial({ color: '#1b1d26', roughness: 0.4 }));
+  cabeca.position.copy(ponta); cabeca.lookAt(cotovelo.x, ponta.y, cotovelo.z); g.add(cabeca);
+  const luz = new THREE.Mesh(new THREE.SphereGeometry(0.025, 16, 8), new THREE.MeshStandardMaterial({ color: '#ffc85c', emissive: '#ffc85c', emissiveIntensity: 2 }));
+  luz.position.copy(ponta).add(new THREE.Vector3(0, -0.05, 0)); g.add(luz);
+  g.traverse(o => { o.castShadow = true; });
+  return g;
+}
+/* Anel de terreno no disco: centro = Polo Norte, borda = Polo Sul (projeção azimutal) */
+// 90°N no centro até 60°S na borda; a raiz amplia o Ártico no centro
+const latDeR = r => 90 - Math.pow((r - R0) / (R1 - R0), 1 / 0.75) * 150;
+const afina = r => Math.min(1, Math.max(0, (r - R0) / 0.04)) * Math.min(1, Math.max(0, (R1 - r) / 0.05));
+function terreno(theta = Math.PI * 2, inicio = 0) {
+  const NA = Math.round(1100 * theta / (Math.PI * 2)), NR = 300;
+  const pos = [], cor = [], idx = [];
+  for (let i = 0; i <= NR; i++) {
+    const r = R0 + (R1 - R0) * i / NR, lat = latDeR(r);
+    for (let j = 0; j <= NA; j++) {
+      const a = inicio + theta * j / NA, lon = ((-a * 180 / Math.PI) % 360 + 540) % 360 - 180;
+      const s = superficie(lat, lon, ESC, ESC_MAR);
+      const y = BASE + (s.h - BASE) * afina(r) + (1 - afina(r)) * 0;
+      pos.push(Math.sin(a) * r, afina(r) < 1 ? BASE + (s.h - BASE) * afina(r) : s.h, Math.cos(a) * r);
+      const k = s.mar && !s.gelo ? 0.88 + 0.12 * Math.sin(r * 520) : 1; // sulcos no fundo do mar
+      cor.push(s.cor.r * k, s.cor.g * k, s.cor.b * k);
+    }
+  }
+  for (let i = 0; i < NR; i++) for (let j = 0; j < NA; j++) {
+    const a = i * (NA + 1) + j, b = a + NA + 1;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cor, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 }));
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+function agua(theta = Math.PI * 2, inicio = 0) {
+  // anel plano com o mesmo ângulo do terreno (x = sen, z = cos)
+  const pos = [], idx = [], N = 512;
+  for (let j = 0; j <= N; j++) { const a = inicio + theta * j / N; for (const r of [R0 + 0.03, R1 - 0.04]) pos.push(Math.sin(a) * r, 0, Math.cos(a) * r); }
+  for (let j = 0; j < N; j++) { const a = 2 * j; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({ color: '#0c3d78', transparent: true, opacity: 0.38, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, depthWrite: false }));
+  m.material.side = THREE.DoubleSide; m.position.y = -0.002; m.receiveShadow = true;
+  return m;
+}
+
+
+/* Placa de gelo marinho: contorno pela área do mês (SVS 5099), espessura visível e fendas */
+const rDeLat = lat => R0 + (R1 - R0) * Math.pow((90 - lat) / 150, 0.75);
+function texturaFendas() {
+  const c = document.createElement('canvas'); c.width = c.height = 1024;
+  const g = c.getContext('2d'); g.fillStyle = '#eef5fb'; g.fillRect(0, 0, 1024, 1024);
+  let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 900; k++) { g.fillStyle = `rgba(160,195,225,${rnd() * 0.25})`; g.beginPath(); g.arc(rnd() * 1024, rnd() * 1024, 4 + rnd() * 30, 0, 7); g.fill(); }
+  g.strokeStyle = 'rgba(70,120,165,0.85)'; g.lineCap = 'round';
+  for (let k = 0; k < 70; k++) {
+    let x = rnd() * 1024, y = rnd() * 1024; g.lineWidth = 0.8 + rnd() * 2.2; g.beginPath(); g.moveTo(x, y);
+    for (let p = 0; p < 9; p++) { x += (rnd() - 0.5) * 90; y += (rnd() - 0.5) * 90; g.lineTo(x, y); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+const FENDAS = texturaFendas();
+function placaGelo(theta = Math.PI * 2, inicio = 0, esp = 0.03) {
+  const forma = new THREE.Shape(), N = 360, cheio = theta >= Math.PI * 2 - 1e-6;
+  if (!cheio) forma.moveTo(0, 0);
+  for (let j = 0; j <= N; j++) {
+    const a = inicio + theta * j / N, lon = ((-a * 180 / Math.PI) % 360 + 540) % 360 - 180;
+    const r = rDeLat(bordaGelo(lon)), x = Math.sin(a) * r, y = -Math.cos(a) * r;
+    if (j === 0 && cheio) forma.moveTo(x, y); else forma.lineTo(x, y);
+  }
+  forma.closePath();
+  const g = new THREE.ExtrudeGeometry(forma, { depth: esp, bevelEnabled: true, bevelThickness: esp * 0.25, bevelSize: 0.012, bevelSegments: 2, curveSegments: 4 });
+  g.rotateX(-Math.PI / 2);
+  const t = FENDAS.clone(); t.needsUpdate = true; t.repeat.set(1.4, 1.4);
+  const m = new THREE.Mesh(g, [
+    new THREE.MeshPhysicalMaterial({ map: t, roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.3 }),
+    new THREE.MeshPhysicalMaterial({ color: '#9cc6e6', roughness: 0.2, transmission: 0.3, thickness: 0.2 }),
+  ]);
+  m.position.y = -esp * 0.65; m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
+/* Paredes do corte: mostram o perfil (vinil, fundo do mar, água, gelo, rocha em camadas) */
+function paredeCorte(a) {
+  const N = 420, M = 26, pos = [], cor = [], idx = [];
+  const fundo = BASE - 0.1;
+  const lon = ((-a * 180 / Math.PI) % 360 + 540) % 360 - 180;
+  for (let i = 0; i <= N; i++) {
+    const r = R * i / N, dentro = r > R0 && r < R1;
+    const s = dentro ? superficie(latDeR(r), lon, ESC, ESC_MAR) : null;
+    const topo = dentro ? BASE + (s.h - BASE) * afina(r) : BASE;
+    const espGelo = 0.06;
+    const agTopo = dentro && s.mar ? (s.sobGelo ? espGelo * 0.35 : Math.max(topo, -0.002)) : topo;
+    for (let k = 0; k <= M; k++) {
+      const y = fundo + (agTopo - fundo) * k / M;
+      pos.push(Math.sin(a) * r, y, Math.cos(a) * r);
+      let c;
+      if (!dentro || y < BASE - 0.001) c = new THREE.Color('#0d0e14').lerp(new THREE.Color('#1c1f2b'), (Math.sin(y * 300) + 1) * 0.15);
+      else if (s.mar && s.sobGelo && y > -espGelo * 0.65) c = new THREE.Color('#eef6fc').lerp(new THREE.Color('#8ab8dc'), Math.min(1, (agTopo - y) / espGelo));
+      else if (s.mar) c = y > topo ? new THREE.Color('#1c5fa8').lerp(new THREE.Color('#071d44'), Math.min(1, -y / 0.2)) : new THREE.Color(Math.sin(y * 400) > 0 ? '#4a4038' : '#3d352e');
+      else if (s.mar && s.gelo) c = y > -0.004 ? new THREE.Color('#dcecf8').lerp(new THREE.Color('#7fb2d8'), (topo - y) / 0.03) : new THREE.Color('#0a2550');
+      else { const faixa = Math.sin((y - BASE) * 160 + r * 3); c = new THREE.Color(faixa > 0 ? '#7a5a3a' : '#5e4630').lerp(new THREE.Color('#3f7a4e'), y > topo - 0.008 ? 0.8 : 0); if (s.gelo && y > topo - 0.04) c.lerp(new THREE.Color('#f2f6fb'), 0.85); }
+      cor.push(c.r, c.g, c.b);
+    }
+  }
+  for (let i = 0; i < N; i++) for (let k = 0; k < M; k++) {
+    const p = i * (M + 1) + k, q = p + M + 1;
+    idx.push(p, q, p + 1, q, q + 1, p + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cor, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide }));
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
+/* Globo com relevo */
+function globo(raio = 1) {
+  const g = new THREE.SphereGeometry(raio, 720, 360);
+  const p = g.attributes.position, cor = [], v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const lat = Math.asin(v.y) * 180 / Math.PI, lon = Math.atan2(v.x, v.z) * 180 / Math.PI;
+    const s = superficie(lat, lon, 0.55);
+    const rr = raio + Math.max(s.h, -0.01);
+    p.setXYZ(i, v.x * rr, v.y * rr, v.z * rr);
+    cor.push(s.cor.r, s.cor.g, s.cor.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cor, 3));
+  g.computeVertexNormals();
+  const grupo = new THREE.Group();
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
+  m.castShadow = m.receiveShadow = true; grupo.add(m);
+  const mar = new THREE.Mesh(new THREE.SphereGeometry(raio, 256, 128), new THREE.MeshPhysicalMaterial({ color: '#1e6fb8', transparent: true, opacity: 0.4, roughness: 0.05, clearcoat: 1, depthWrite: false }));
+  grupo.add(mar);
+  const atm = new THREE.Mesh(new THREE.SphereGeometry(raio * 1.06, 128, 64), new THREE.ShaderMaterial({
+    transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'varying vec3 n; void main(){ n = normalize(normalMatrix*normal); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+    fragmentShader: 'varying vec3 n; void main(){ float k = pow(0.72 - dot(n, vec3(0.,0.,1.)), 3.); gl_FragColor = vec4(0.35,0.6,1.,1.)*k*1.6; }',
+  }));
+  grupo.add(atm);
+  return grupo;
+}
+
+/* ---------- Conceitos ---------- */
+const TEXTOS = {
+  1: ['Planeta no vinil', 'O disco é o planeta visto de cima do Polo Norte: o centro é o Ártico e a borda é a Antártida. Os continentes sobem do vinil com relevo e sombra; o mar é uma resina azul por cima dos sulcos, mais escura onde é fundo. No centro, a placa de gelo marinho com fendas, do tamanho lido no SVS 5099.'],
+  2: ['Globo de vidro', 'Um globo com relevo flutua dentro de uma esfera de vidro sobre o vinil, girando junto com o disco. Atmosfera em volta, calota de gelo no topo do tamanho do mês e mantos de gelo na Groenlândia e na Antártida.'],
+  3: ['Corte do disco', 'O mesmo planeta no vinil, com uma fatia retirada como num bolo. O corte mostra a profundidade: o vinil embaixo, o fundo do mar, a água em azul, a placa de gelo em branco por cima e as camadas de rocha dos continentes.'],
+};
+let atual = null, cena = 1, giro = null;
+function montar(c) {
+  cena = c;
+  if (atual) { scene.remove(atual); atual.traverse(o => { o.geometry?.dispose(); }); }
+  atual = new THREE.Group(); giro = new THREE.Group(); atual.add(giro);
+  atual.add(prato()); if (c !== 3) atual.add(braco());
+  const pino = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 24), new THREE.MeshStandardMaterial({ color: '#c7ccd8', metalness: 1, roughness: 0.2 }));
+  pino.position.y = 0.02; if (c !== 2) atual.add(pino);
+  BASE = c === 3 ? -0.21 : -0.07; ESC = c === 3 ? 0.9 : 0.75; ESC_MAR = c === 3 ? 2.2 : 0.75;
+  if (c === 1) {
+    PLACA = true;
+    giro.add(vinil(), terreno(), agua(), placaGelo());
+    camera.position.set(0.4, 3.3, 5.6); controls.target.set(0.2, -0.1, 0);
+  } else if (c === 2) {
+    PLACA = false;
+    giro.add(vinil());
+    const g = globo(0.92); g.position.y = 1.2; g.rotation.x = 0.55; g.rotation.y = -1.2; giro.add(g);
+    const vidro = new THREE.Mesh(new THREE.SphereGeometry(1.2, 128, 64), new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, thickness: 0.15, roughness: 0.03, ior: 1.45, transparent: true, opacity: 1, envMapIntensity: 1.4 }));
+    vidro.position.y = 1.2; giro.add(vidro);
+    const anel = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.85, 0.12, 128), new THREE.MeshStandardMaterial({ color: '#c7ccd8', metalness: 1, roughness: 0.25 }));
+    anel.position.y = BASE + 0.06; anel.castShadow = true; giro.add(anel);
+    const pino = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.22, 24), anel.material); pino.position.y = BASE + 0.2; giro.add(pino);
+    camera.position.set(0.6, 3.0, 7.6); controls.target.set(0.3, 0.55, 0);
+  } else {
+    const corte = 1.25, inicio = 0.1;
+    PLACA = true;
+    giro.add(vinil(Math.PI * 2 - corte, inicio + corte), terreno(Math.PI * 2 - corte, inicio + corte), agua(Math.PI * 2 - corte, inicio + corte), placaGelo(Math.PI * 2 - corte, inicio + corte, 0.06));
+    giro.add(paredeCorte(inicio + corte), paredeCorte(inicio + Math.PI * 2));
+    camera.position.set(-0.9, 1.75, 4.6); controls.target.set(0.9, -0.15, 0.15);
+  }
+  scene.add(atual);
+  document.getElementById('titulo').textContent = TEXTOS[c][0];
+  document.getElementById('texto').textContent = TEXTOS[c][1] + ` Gelo: ${rotulo(mesGelo)}, ${mesGelo.mkm2.toFixed(1).replace('.', ',')} milhões de km² lidos (borda da calota em ${latGelo(mesGelo.mkm2).toFixed(0)}°N).`;
+  document.querySelectorAll('[data-c]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.c === c)));
+}
+const MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+const rotulo = m => { const [a, b] = m.mes.split('-').map(Number); return `${MESES[b - 1]} de ${a}`; };
+
+document.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => montar(+b.dataset.c)));
+document.getElementById('gelo').addEventListener('click', e => {
+  mesGelo = mesGelo === MAIOR ? MENOR : MAIOR;
+  e.target.textContent = mesGelo === MAIOR ? 'Gelo: maior mês' : 'Gelo: menor mês';
+  montar(cena);
+});
+const q = new URLSearchParams(location.search);
+if (q.get('gelo') === 'menor') { mesGelo = MENOR; document.getElementById('gelo').textContent = 'Gelo: menor mês'; }
+montar(+(q.get('c') || 1));
+window.pronto = true;
+
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); });
+const relogio = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = relogio.getDelta();
+  if (giro && q.get('parado') === null) giro.rotation.y += dt * 0.08;
+  controls.update(); composer.render();
+});
+</script>
+</body>
+</html>

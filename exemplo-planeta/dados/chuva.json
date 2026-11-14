@@ -1,0 +1,437 @@
+{
+ "fonte": "NASA SVS 5149, GEOS-FP Precipitation and Clouds (Earth Information Center, painel Earth Now). Quadros 2048x1024, mapa plano. Valor: fração da área com chuva (0 a 1) e intensidade média na legenda (0 a 1).",
+ "quadros": {
+  "00000001.png": {
+   "mundo": {
+    "area": 0.0898,
+    "intensidade": 0.037
+   },
+   "brasil": {
+    "area": 0.1501,
+    "intensidade": 0.032
+   },
+   "atlsul": {
+    "area": 0.0155,
+    "intensidade": 0.029
+   },
+   "artico": {
+    "area": 0.0681,
+    "intensidade": 0.039
+   }
+  },
+  "00000017.png": {
+   "mundo": {
+    "area": 0.084,
+    "intensidade": 0.035
+   },
+   "brasil": {
+    "area": 0.143,
+    "intensidade": 0.034
+   },
+   "atlsul": {
+    "area": 0.0169,
+    "intensidade": 0.028
+   },
+   "artico": {
+    "area": 0.0551,
+    "intensidade": 0.032
+   }
+  },
+  "00000033.png": {
+   "mundo": {
+    "area": 0.0979,
+    "intensidade": 0.035
+   },
+   "brasil": {
+    "area": 0.2192,
+    "intensidade": 0.031
+   },
+   "atlsul": {
+    "area": 0.0286,
+    "intensidade": 0.037
+   },
+   "artico": {
+    "area": 0.0464,
+    "intensidade": 0.028
+   }
+  },
+  "00000049.png": {
+   "mundo": {
+    "area": 0.0959,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1292,
+    "intensidade": 0.029
+   },
+   "atlsul": {
+    "area": 0.0571,
+    "intensidade": 0.046
+   },
+   "artico": {
+    "area": 0.063,
+    "intensidade": 0.033
+   }
+  },
+  "00000065.png": {
+   "mundo": {
+    "area": 0.0924,
+    "intensidade": 0.038
+   },
+   "brasil": {
+    "area": 0.1379,
+    "intensidade": 0.027
+   },
+   "atlsul": {
+    "area": 0.0331,
+    "intensidade": 0.06
+   },
+   "artico": {
+    "area": 0.0372,
+    "intensidade": 0.028
+   }
+  },
+  "00000081.png": {
+   "mundo": {
+    "area": 0.1079,
+    "intensidade": 0.035
+   },
+   "brasil": {
+    "area": 0.1522,
+    "intensidade": 0.027
+   },
+   "atlsul": {
+    "area": 0.0474,
+    "intensidade": 0.05
+   },
+   "artico": {
+    "area": 0.0554,
+    "intensidade": 0.025
+   }
+  },
+  "00000097.png": {
+   "mundo": {
+    "area": 0.1008,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1258,
+    "intensidade": 0.033
+   },
+   "atlsul": {
+    "area": 0.0558,
+    "intensidade": 0.055
+   },
+   "artico": {
+    "area": 0.0731,
+    "intensidade": 0.03
+   }
+  },
+  "00000113.png": {
+   "mundo": {
+    "area": 0.0927,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1315,
+    "intensidade": 0.028
+   },
+   "atlsul": {
+    "area": 0.0245,
+    "intensidade": 0.066
+   },
+   "artico": {
+    "area": 0.0473,
+    "intensidade": 0.026
+   }
+  },
+  "00000129.png": {
+   "mundo": {
+    "area": 0.1037,
+    "intensidade": 0.035
+   },
+   "brasil": {
+    "area": 0.1887,
+    "intensidade": 0.032
+   },
+   "atlsul": {
+    "area": 0.0318,
+    "intensidade": 0.046
+   },
+   "artico": {
+    "area": 0.0492,
+    "intensidade": 0.028
+   }
+  },
+  "00000145.png": {
+   "mundo": {
+    "area": 0.097,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1027,
+    "intensidade": 0.04
+   },
+   "atlsul": {
+    "area": 0.0489,
+    "intensidade": 0.041
+   },
+   "artico": {
+    "area": 0.0525,
+    "intensidade": 0.031
+   }
+  },
+  "00000161.png": {
+   "mundo": {
+    "area": 0.0937,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.0985,
+    "intensidade": 0.038
+   },
+   "atlsul": {
+    "area": 0.0263,
+    "intensidade": 0.038
+   },
+   "artico": {
+    "area": 0.0468,
+    "intensidade": 0.035
+   }
+  },
+  "00000177.png": {
+   "mundo": {
+    "area": 0.1088,
+    "intensidade": 0.035
+   },
+   "brasil": {
+    "area": 0.1459,
+    "intensidade": 0.032
+   },
+   "atlsul": {
+    "area": 0.0287,
+    "intensidade": 0.062
+   },
+   "artico": {
+    "area": 0.043,
+    "intensidade": 0.027
+   }
+  },
+  "00000193.png": {
+   "mundo": {
+    "area": 0.1006,
+    "intensidade": 0.038
+   },
+   "brasil": {
+    "area": 0.0754,
+    "intensidade": 0.026
+   },
+   "atlsul": {
+    "area": 0.0564,
+    "intensidade": 0.076
+   },
+   "artico": {
+    "area": 0.0509,
+    "intensidade": 0.032
+   }
+  },
+  "00000209.png": {
+   "mundo": {
+    "area": 0.0996,
+    "intensidade": 0.037
+   },
+   "brasil": {
+    "area": 0.1178,
+    "intensidade": 0.028
+   },
+   "atlsul": {
+    "area": 0.0779,
+    "intensidade": 0.064
+   },
+   "artico": {
+    "area": 0.0545,
+    "intensidade": 0.028
+   }
+  },
+  "00000225.png": {
+   "mundo": {
+    "area": 0.1108,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1526,
+    "intensidade": 0.035
+   },
+   "atlsul": {
+    "area": 0.0663,
+    "intensidade": 0.047
+   },
+   "artico": {
+    "area": 0.0623,
+    "intensidade": 0.027
+   }
+  },
+  "00000241.png": {
+   "mundo": {
+    "area": 0.1021,
+    "intensidade": 0.035
+   },
+   "brasil": {
+    "area": 0.1554,
+    "intensidade": 0.036
+   },
+   "atlsul": {
+    "area": 0.0628,
+    "intensidade": 0.058
+   },
+   "artico": {
+    "area": 0.0604,
+    "intensidade": 0.028
+   }
+  },
+  "00000257.png": {
+   "mundo": {
+    "area": 0.1001,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1347,
+    "intensidade": 0.033
+   },
+   "atlsul": {
+    "area": 0.0611,
+    "intensidade": 0.065
+   },
+   "artico": {
+    "area": 0.0521,
+    "intensidade": 0.032
+   }
+  },
+  "00000273.png": {
+   "mundo": {
+    "area": 0.1126,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1437,
+    "intensidade": 0.029
+   },
+   "atlsul": {
+    "area": 0.0429,
+    "intensidade": 0.049
+   },
+   "artico": {
+    "area": 0.0376,
+    "intensidade": 0.032
+   }
+  },
+  "00000289.png": {
+   "mundo": {
+    "area": 0.1005,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1551,
+    "intensidade": 0.029
+   },
+   "atlsul": {
+    "area": 0.0247,
+    "intensidade": 0.033
+   },
+   "artico": {
+    "area": 0.0213,
+    "intensidade": 0.03
+   }
+  },
+  "00000305.png": {
+   "mundo": {
+    "area": 0.0958,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.1337,
+    "intensidade": 0.029
+   },
+   "atlsul": {
+    "area": 0.0127,
+    "intensidade": 0.031
+   },
+   "artico": {
+    "area": 0.0221,
+    "intensidade": 0.028
+   }
+  },
+  "00000321.png": {
+   "mundo": {
+    "area": 0.1013,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.2123,
+    "intensidade": 0.028
+   },
+   "atlsul": {
+    "area": 0.0182,
+    "intensidade": 0.033
+   },
+   "artico": {
+    "area": 0.0376,
+    "intensidade": 0.026
+   }
+  },
+  "00000337.png": {
+   "mundo": {
+    "area": 0.1023,
+    "intensidade": 0.035
+   },
+   "brasil": {
+    "area": 0.1993,
+    "intensidade": 0.03
+   },
+   "atlsul": {
+    "area": 0.0167,
+    "intensidade": 0.03
+   },
+   "artico": {
+    "area": 0.0435,
+    "intensidade": 0.027
+   }
+  },
+  "00000353.png": {
+   "mundo": {
+    "area": 0.0962,
+    "intensidade": 0.037
+   },
+   "brasil": {
+    "area": 0.1591,
+    "intensidade": 0.028
+   },
+   "atlsul": {
+    "area": 0.0402,
+    "intensidade": 0.037
+   },
+   "artico": {
+    "area": 0.0513,
+    "intensidade": 0.031
+   }
+  },
+  "00000369.png": {
+   "mundo": {
+    "area": 0.1053,
+    "intensidade": 0.036
+   },
+   "brasil": {
+    "area": 0.2072,
+    "intensidade": 0.028
+   },
+   "atlsul": {
+    "area": 0.0373,
+    "intensidade": 0.031
+   },
+   "artico": {
+    "area": 0.0516,
+    "intensidade": 0.033
+   }
+  }
+ }
+}

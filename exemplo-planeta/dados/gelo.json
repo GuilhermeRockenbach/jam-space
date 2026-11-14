@@ -1,0 +1,101 @@
+{
+ "fonte": "NASA SVS 5099, Daily Polar Sea Ice, Two Year History (EIC, painel Climate Vital Signs; dados JAXA AMSR2). Vídeo webm 4096x2048, 730 quadros diários desde 03/05/2021; vista polar fixa, georreferenciada com modelo de perspectiva (85% de acerto com a máscara terra/mar do Blue Marble). Pixel claro e sem cor sobre o mar (lat >= 40) = gelo; área somada com peso cos(lat), um quadro a cada 3 dias, média de cada mês. Atenção: a área absoluta (mkm2) sai cerca de 2 a 3 milhões de km² acima do real por causa dos pixels da costa; o app usa só a fração do maior mês.",
+ "meses": [
+  {
+   "mes": "2021-05",
+   "mkm2": 15.158
+  },
+  {
+   "mes": "2021-06",
+   "mkm2": 12.929
+  },
+  {
+   "mes": "2021-07",
+   "mkm2": 10.196
+  },
+  {
+   "mes": "2021-08",
+   "mkm2": 8.272
+  },
+  {
+   "mes": "2021-09",
+   "mkm2": 7.971
+  },
+  {
+   "mes": "2021-10",
+   "mkm2": 10.267
+  },
+  {
+   "mes": "2021-11",
+   "mkm2": 13.81
+  },
+  {
+   "mes": "2021-12",
+   "mkm2": 15.801
+  },
+  {
+   "mes": "2022-01",
+   "mkm2": 16.916
+  },
+  {
+   "mes": "2022-02",
+   "mkm2": 17.371
+  },
+  {
+   "mes": "2022-03",
+   "mkm2": 17.32
+  },
+  {
+   "mes": "2022-04",
+   "mkm2": 17.079
+  },
+  {
+   "mes": "2022-05",
+   "mkm2": 15.819
+  },
+  {
+   "mes": "2022-06",
+   "mkm2": 13.193
+  },
+  {
+   "mes": "2022-07",
+   "mkm2": 10.737
+  },
+  {
+   "mes": "2022-08",
+   "mkm2": 8.849
+  },
+  {
+   "mes": "2022-09",
+   "mkm2": 8.255
+  },
+  {
+   "mes": "2022-10",
+   "mkm2": 10.159
+  },
+  {
+   "mes": "2022-11",
+   "mkm2": 13.792
+  },
+  {
+   "mes": "2022-12",
+   "mkm2": 15.496
+  },
+  {
+   "mes": "2023-01",
+   "mkm2": 16.461
+  },
+  {
+   "mes": "2023-02",
+   "mkm2": 17.041
+  },
+  {
+   "mes": "2023-03",
+   "mkm2": 17.346
+  },
+  {
+   "mes": "2023-04",
+   "mkm2": 17.018
+  }
+ ]
+}
