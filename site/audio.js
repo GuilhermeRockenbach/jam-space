@@ -27,7 +27,9 @@ let ger = null;
 /* Celular: menos vozes e reverb mais curto (menos carga = sem estalos),
    e mais folga no agendamento, porque o 3D disputa o processador. */
 export const LEVE = matchMedia('(pointer: coarse)').matches || (navigator.hardwareConcurrency || 8) <= 4;
-export const FOLGA = LEVE ? 0.6 : 0.4; // segundos de música agendados à frente
+// Segundos de música agendados à frente. Folga grande: se o 3D segurar o navegador por um instante,
+// o próximo compasso já está agendado e a música não abre buraco.
+export const FOLGA = LEVE ? 1.4 : 1.1;
 
 export const agora = () => (ctx ? ctx.currentTime : 0);
 export const pronto = () => !!ctx && ctx.state === 'running';
@@ -42,11 +44,11 @@ function novaGeracao() {
 }
 
 /** Cala na hora tudo o que já foi agendado (o próximo som começa limpo). */
-export function silenciar() {
+export function silenciar(suave = 0.025) {
   if (!ctx || !ger) return;
   const velha = ger, t = ctx.currentTime;
-  Object.values(velha).forEach(n => { n.gain.cancelScheduledValues(t); n.gain.setTargetAtTime(0, t, 0.025); });
-  setTimeout(() => Object.values(velha).forEach(n => n.disconnect()), 400);
+  Object.values(velha).forEach(n => { n.gain.cancelScheduledValues(t); n.gain.setTargetAtTime(0, t, suave); });
+  setTimeout(() => Object.values(velha).forEach(n => n.disconnect()), Math.max(400, suave * 8000));
   ger = novaGeracao();
 }
 
@@ -71,10 +73,18 @@ function destravarIOS() {
 
 /** Chame sempre dentro de um toque ou clique. Devolve uma promessa que resolve quando o som está pronto. */
 export function iniciarAudio() {
-  if (ctx) {
-    if (ctx.state !== 'running') { destravarIOS(); return ctx.resume().catch(() => {}); }
-    return Promise.resolve();
-  }
+  if (!ctx) montarAudio();
+  if (ctx.state !== 'running') { destravarIOS(); return ctx.resume().catch(() => {}); }
+  return Promise.resolve();
+}
+
+/** Monta o som com antecedência (pausado), quando a página fica ociosa: assim o primeiro
+    toque só destrava o áudio, sem travar o disco ~200 ms preparando o eco e a reverberação. */
+export function prepararAudio() {
+  try { if (!ctx) montarAudio(); } catch { /* monta no primeiro toque */ }
+}
+
+function montarAudio() {
   ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: LEVE ? 'playback' : 'balanced' });
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -18; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.2;
@@ -102,13 +112,13 @@ export function iniciarAudio() {
   filtroEco.connect(saidaEco); saidaEco.connect(comp);
   ger = novaGeracao();
   definirAndamento(SEG_POR_COMPASSO);
-  destravarIOS();
 
   // Ao voltar para a aba (ou depois de uma ligação no celular), o navegador pode ter pausado o som
+  let jaTocou = false;
+  ctx.addEventListener('statechange', () => { if (ctx.state === 'running') jaTocou = true; });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ctx.state !== 'running') ctx.resume().catch(() => {});
+    if (jaTocou && document.visibilityState === 'visible' && ctx.state !== 'running') ctx.resume().catch(() => {});
   });
-  return ctx.state === 'running' ? Promise.resolve() : ctx.resume().catch(() => {});
 }
 
 /** Monitor do som: analisador e o que está tocando agora (andamento, acorde, tensão). */
@@ -320,6 +330,12 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
   // Calor (0 = frio, 1 = quente). Sem temperatura, um meio-termo neutro.
   const tn = v.temp !== undefined ? calor(v) : 0.4;
   const energia = v.temp !== undefined ? Math.min(3, Math.floor(tn * 4)) : 1; // 0 calmo, 1 médio, 2 agitado, 3 alarme
+  /* Ritmo: a energia define o caráter, mas a quantidade de notas por compasso também depende
+     da duração real do compasso. Em períodos longos a música é acelerada (passa de 200 bpm);
+     ali, semicolcheias viram ruído e sobrecarregam o áudio. Acima de ~150 bpm cai um nível,
+     acima de ~210 bpm, dois. */
+  const ritmo = dur < 1.15 ? Math.min(energia, 1) : dur < 1.6 ? Math.min(energia, 2) : energia;
+  const dens = Math.min(1, dur / 1.7); // os temas também tocam menos notas quando o compasso é curto
   const inicioMusica = compasso === 0;
   // Mixagem: quanto mais temas juntos, mais baixo cada um, para a soma continuar limpa.
   // Cada tema também tem o seu "andar": baixo e pad embaixo, melodia no meio,
@@ -336,16 +352,16 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
     }));
     // Alarme (calor extremo): cordas agudas em colcheias repetidas, como num filme de suspense.
     // A urgência vem do ritmo, não de notas que brigam: só notas do acorde.
-    if (energia === 3) {
+    if (energia === 3 && ritmo >= 2) {
       const cordas = voicing(acorde, 74).slice(0, 2);
-      for (let k = 0; k < 8; k += LEVE ? 2 : 1) { const i = k % 2; voz({
+      for (let k = 0; k < 8; k += LEVE || ritmo < 3 ? 2 : 1) { const i = k % 2; voz({
         midi: cordas[i], t: t + k * tempo / 2, dur: tempo * 0.42, tipo: 'sawtooth', vol: 0.016 * mix, ataque: 0.02, soltura: 0.08,
         corte: 2200, q: 0.7, pan: i ? 0.35 : -0.35, rev: 0.35,
       }); }
     }
     // Piano elétrico: frio = um acorde por compasso; quente = sincopado e repetido
     const notasPiano = voicing(acorde, 60).slice(0, LEVE ? 3 : 4);
-    const golpes = [[0], [0, 1.5, 3], [0, 1, 1.5, 2.5, 3], [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]][energia];
+    const golpes = [[0], [0, 1.5, 3], [0, 1, 1.5, 2.5, 3], [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]][ritmo];
     golpes.forEach((b, k) => (k === 0 ? notasPiano : notasPiano.slice(-2)).forEach((m, i) => piano({
       midi: m, t: t + b * tempo + i * 0.008, vol: k === 0 ? 0.045 : 0.03, dur: energia === 0 ? 2.4 : 0.8, simples: k > 0, pan: -0.2, rev: 0.3,
     })));
@@ -353,19 +369,21 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
     const raiz = voicing([acorde[0]], 38)[0];
     const linhas = [
       [[0, raiz, 4]],
-      [[0, raiz, 1], [1.5, raiz, 0.5], [2, raiz + 7, 1], [3, raiz + 12, 0.6]],
+      [[0, raiz, 1.45], [1.5, raiz, 0.5], [2, raiz + 7, 1], [3, raiz + 12, 1]], // a 1ª nota segura até a síncope (pausa ali soava como falha)
       [[0, raiz, 0.5], [0.5, raiz, 0.5], [1, raiz + 12, 0.5], [1.5, raiz, 0.5], [2, raiz + 7, 0.5], [2.5, raiz + 7, 0.5], [3, raiz + 12, 0.5], [3.5, raiz + 10, 0.5]],
     ];
-    linhas[Math.min(2, energia)].forEach(([b, m, d]) => {
-      voz({ midi: m, t: t + b * tempo, dur: d * tempo * 0.9, tipo: 'triangle', vol: 0.2, soltura: 0.1, corte: 500 + tn * 600, rev: 0.03 });
-      if (!LEVE && energia < 2) voz({ midi: m - 12, t: t + b * tempo, dur: d * tempo * 0.9, vol: 0.18, soltura: 0.1, rev: 0 });
+    linhas[Math.min(2, ritmo)].forEach(([b, m, d]) => {
+      // A última nota do compasso vai até a virada e se solta devagar, emendando no próximo compasso
+      const ate = b + d >= 3.95, nd = d * tempo * (ate ? 0.99 : 0.9), sol = ate ? 0.25 : 0.1;
+      voz({ midi: m, t: t + b * tempo, dur: nd, tipo: 'triangle', vol: 0.2, soltura: sol, corte: 500 + tn * 600, rev: 0.03 });
+      if (!LEVE && energia < 2) voz({ midi: m - 12, t: t + b * tempo, dur: nd, vol: 0.18, soltura: sol, rev: 0 });
     });
     // Bateria: frio = quase nada; quente = bumbo em todo tempo e chimbal em semicolcheias
     if (!inicioMusica) {
-      const bumbos = [[0], [0, 2], [0, 1, 2, 3], [0, 1, 2, 2.5, 3]][energia];
+      const bumbos = [[0], [0, 2], [0, 1, 2, 3], [0, 1, 2, 2.5, 3]][ritmo];
       bumbos.forEach((b, k) => bumbo(t + b * tempo, k === 0 ? 0.28 : 0.22));
     }
-    const sub = [2, 8, 16, 16][energia];
+    const sub = [2, 8, 16, 16][ritmo];
     for (let k = 0; k < sub; k++) chimbal(t + k * dur / sub + (k % 2 ? tempo * 0.03 : 0), k % 2 ? 0.024 : 0.014 + energia * 0.004);
   }
 
@@ -394,7 +412,7 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
     const variacao = Math.floor(compasso / 4) % 2; // a cada frase, a melodia sobe um degrau
     const ancora = notas.reduce((a, m) => (Math.abs(m - centro) < Math.abs(a - centro) ? m : a), notas[0]);
     const mot = energia === 0 ? MOTIVOS[3] : MOTIVOS[pos];
-    const repete = energia >= 2 ? 2 : 1; // no calor, o motivo vem em dobro (o dobro de notas)
+    const repete = ritmo >= 2 ? 2 : 1; // no calor, o motivo vem em dobro (o dobro de notas)
     for (let rep = 0; rep < repete; rep++) mot.r.forEach((b, k) => {
       const idx = Math.min(notas.length - 1, notas.indexOf(ancora) + mot.passo[k] + variacao + rep);
       const ini = (b / repete + rep * 4 / repete) * tempo;
@@ -411,7 +429,7 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
   if (v.raios !== undefined) {
     const forca = (0.08 + v.raios * 0.1) * mix;
     caixa(t + tempo, forca); caixa(t + 3 * tempo, forca);
-    euclides(Math.round(v.raios * 6), 16).forEach((b, k) => {
+    euclides(Math.round(v.raios * 6 * dens), 16).forEach((b, k) => {
       if (!b || k % 4 === 0) return;
       const tk = t + k * s16;
       ruido({ t: tk, dur: 0.05, vol: (0.03 + v.raios * 0.035) * mix, freq: 2800, q: 1.5, pan: k % 2 ? 0.5 : -0.5, rev: 0.3 });
@@ -424,7 +442,7 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
   if (v.luzes !== undefined) {
     const notas = voicing(acorde, 69); notas.push(notas[0] + 12);
     let i = 0;
-    euclides(3 + Math.round(v.luzes * 5), 8).forEach((b, k) => {
+    euclides(Math.round((3 + v.luzes * 5) * dens), 8).forEach((b, k) => {
       if (!b) return;
       piano({ midi: notas[[0, 2, 1, 3, 4, 3, 2, 1][i++ % 8]], t: t + k * tempo / 2, vol: (0.03 + v.luzes * 0.02) * mix, dur: 0.6, pan: k % 2 ? 0.4 : 0.1, rev: 0.3, eco: v.gelo !== undefined ? 0.12 : 0.3 });
     });
@@ -437,7 +455,7 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
     const notas = notasDoAcorde(acorde, 76, 91);
     const n = LEVE ? 8 : 16, k0 = (compasso * 5) % n; // o padrão gira a cada compasso, como chuva de verdade
     let i = 0;
-    euclides(Math.max(1, Math.round(1 + v.chuva * (LEVE ? 4 : 8))), n).forEach((b, k) => {
+    euclides(Math.max(1, Math.round((1 + v.chuva * (LEVE ? 4 : 8)) * dens)), n).forEach((b, k) => {
       if (!b) return;
       const kk = (k + k0) % n;
       gota({ midi: notas[(i++ * 5 + compasso) % notas.length], t: t + kk * dur / n, vol: (0.035 + v.chuva * 0.02) * mix, pan: Math.sin(kk * 2.3 + compasso) * 0.7 });
@@ -452,7 +470,7 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
     const notas = voicing(acorde, (abaixo ? 72 : 79) + (comLuzes ? 12 : 0));
     const passos = comLuzes ? 4 : 8;
     let i = 0;
-    euclides(Math.max(1, Math.round(v.gelo * (comLuzes ? 3 : 6))), passos).forEach((b, k) => {
+    euclides(Math.max(1, Math.round(v.gelo * (comLuzes ? 3 : 6) * dens)), passos).forEach((b, k) => {
       if (!b) return;
       sino({ midi: notas[(i++ * 3) % 4], t: t + k * dur / passos, vol: 0.045 * mix, pan: Math.sin(k * 1.7) * 0.6, rev: 0.6, eco: 0.2 });
     });
@@ -462,6 +480,8 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
 
 const AMOSTRAS = { temp: { temp: 0.2 }, raios: { raios: 0.7 }, luzes: { luzes: 0.7 }, gelo: { gelo: 0.85 }, chuva: { chuva: 0.7 } };
 export function tocarAmostra(id, aoRaio) {
+  // Som preparado mas ainda pausado: espera destravar (leva um instante) e então toca
+  if (ctx && ctx.state === 'suspended') { ctx.resume().then(() => { if (pronto()) tocarAmostra(id, aoRaio); }).catch(() => {}); return; }
   if (!pronto()) return;
   tocarPasso(AMOSTRAS[id], ctx.currentTime + 0.03, SEG_POR_COMPASSO * 0.75, aoRaio, { base: false });
 }

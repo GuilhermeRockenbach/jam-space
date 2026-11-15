@@ -181,16 +181,27 @@ export function criarCena(palco, { reduzido }) {
   const sulcosCanvas = document.createElement('canvas'); sulcosCanvas.width = sulcosCanvas.height = 1024;
   const sulcos = new THREE.CanvasTexture(sulcosCanvas);
   sulcos.colorSpace = THREE.SRGBColorSpace; sulcos.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  // Os sulcos finos são desenhados uma vez só; numa troca de tema só as divisões entre faixas mudam
+  // (redesenhar os ~250 círculos a cada troca travava um quadro)
+  const sulcosBase = document.createElement('canvas'); sulcosBase.width = sulcosBase.height = 1024;
+  let faixasFeitas = null;
   function desenharSulcos(faixas) {
-    const g = sulcosCanvas.getContext('2d'), c = 512, rr = semente(31);
-    g.fillStyle = '#0c0c12'; g.fillRect(0, 0, 1024, 1024);
-    const rIni = 512 * (R_ROTULO / R) * 1.04, rFim = 506;
-    for (let r = rIni; r < rFim; r += 1.7) {
-      const l = 22 + rr() * 26;
-      g.strokeStyle = `rgb(${l},${l},${l + 8})`; g.lineWidth = 0.9;
-      g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.stroke();
+    const rIni = 512 * (R_ROTULO / R) * 1.04, rFim = 506, c = 512;
+    if (faixasFeitas === null) {
+      const gb = sulcosBase.getContext('2d'), rr = semente(31);
+      gb.fillStyle = '#0c0c12'; gb.fillRect(0, 0, 1024, 1024);
+      for (let r = rIni; r < rFim; r += 1.7) {
+        const l = 22 + rr() * 26;
+        gb.strokeStyle = `rgb(${l},${l},${l + 8})`; gb.lineWidth = 0.9;
+        gb.beginPath(); gb.arc(c, c, r, 0, Math.PI * 2); gb.stroke();
+      }
     }
-    if (faixas > 1 && faixas <= 40) {
+    const visiveis = faixas > 1 && faixas <= 40 ? faixas : 0;
+    if (visiveis === faixasFeitas) return;
+    faixasFeitas = visiveis;
+    const g = sulcosCanvas.getContext('2d');
+    g.drawImage(sulcosBase, 0, 0);
+    if (visiveis) {
       for (let i = 1; i < faixas; i++) {
         const r = rFim - (i / faixas) * (rFim - rIni);
         g.strokeStyle = '#050508'; g.lineWidth = 3;
@@ -230,7 +241,8 @@ export function criarCena(palco, { reduzido }) {
     }
   }
   let ultimoRotulo = { texto: '', cor: '#2848a8' };
-  function desenharRotulo({ texto, cor }) {
+  function desenharRotulo({ texto, cor }, forcar = false) {
+    if (!forcar && texto === ultimoRotulo.texto && cor === ultimoRotulo.cor) return; // nada mudou: não reenvia a textura
     ultimoRotulo = { texto, cor };
     const g = rotuloCanvas.getContext('2d');
     g.clearRect(0, 0, 1024, 1024);
@@ -253,8 +265,8 @@ export function criarCena(palco, { reduzido }) {
     g.restore();
     texRotulo.needsUpdate = true;
   }
-  desenharRotulo(ultimoRotulo);
-  document.fonts?.ready.then(() => desenharRotulo(ultimoRotulo));
+  desenharRotulo(ultimoRotulo, true);
+  document.fonts?.ready.then(() => desenharRotulo(ultimoRotulo, true));
 
   const pino = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 24), new THREE.MeshStandardMaterial({ color: 0xc9d1e6, metalness: 1, roughness: 0.2 }));
   pino.position.y = 0.08; cena.add(pino);
@@ -371,7 +383,7 @@ export function criarCena(palco, { reduzido }) {
   // Borda do gelo: anel ciano que pulsa, mostra até onde o gelo chega neste mês
   const bordaGelo = new THREE.Mesh(
     new THREE.RingGeometry(0.955, 1.045, 160),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 1.5, 2.2), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 1.2, 1.7), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   bordaGelo.rotation.x = -Math.PI / 2; bordaGelo.position.y = AGUA + 0.045; bordaGelo.renderOrder = 9;
   disco.add(bordaGelo);
@@ -382,7 +394,8 @@ export function criarCena(palco, { reduzido }) {
     for (let i = 0; i < MAX_GEADA; i++) { const a = r() * Math.PI * 2, d = Math.sqrt(r()); geadaUnit.set([Math.sin(a) * d, r(), Math.cos(a) * d], i * 3); }
   }
   const geadaGeo = new THREE.BufferGeometry(); geadaGeo.setAttribute('position', new THREE.BufferAttribute(geadaPos, 3));
-  const geadaMat = new THREE.PointsMaterial({ size: 0.06, color: new THREE.Color(1.0, 1.5, 2.1), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  // Geada: cor quase sem estourar o bloom (com 2.1 virava uma névoa branca sobre o disco)
+  const geadaMat = new THREE.PointsMaterial({ size: 0.04, color: new THREE.Color(0.75, 1.0, 1.3), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
   const geada = new THREE.Points(geadaGeo, geadaMat); geada.visible = false;
   disco.add(geada);
   const geloRaio = g => rDeLat(latGelo(g));
@@ -565,14 +578,35 @@ export function criarCena(palco, { reduzido }) {
   redimensionar();
 
   /* ---------- Relevo: só muda quando os continentes sobem ou descem ---------- */
+  // Normais direto da grade (diferenças centrais entre os vizinhos), bem mais leve que o
+  // computeVertexNormals genérico, que travava o disco enquanto os continentes subiam
+  terrenoGeo.computeVertexNormals();
+  const norT = terrenoGeo.attributes.normal, nrm = norT.array;
+  function normaisDaGrade() {
+    const L = NA + 1;
+    for (let i = 0; i <= NR; i++) {
+      const ia = i > 0 ? i - 1 : i, ib = i < NR ? i + 1 : i;
+      for (let j = 0; j <= NA; j++) {
+        const ja = j > 0 ? j - 1 : NA - 1, jb = j < NA ? j + 1 : 1; // a costura (j = 0 e j = NA) dá a volta
+        const a = (ia * L + j) * 3, b = (ib * L + j) * 3, c = (i * L + ja) * 3, d = (i * L + jb) * 3;
+        const rx = posArr[b] - posArr[a], ry = posArr[b + 1] - posArr[a + 1], rz = posArr[b + 2] - posArr[a + 2];
+        const tx = posArr[d] - posArr[c], ty = posArr[d + 1] - posArr[c + 1], tz = posArr[d + 2] - posArr[c + 2];
+        let nx = ry * tz - rz * ty, ny = rz * tx - rx * tz, nz = rx * ty - ry * tx;
+        if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        const m = 1 / (Math.hypot(nx, ny, nz) || 1), k = (i * L + j) * 3;
+        nrm[k] = nx * m; nrm[k + 1] = ny * m; nrm[k + 2] = nz * m;
+      }
+    }
+    norT.needsUpdate = true;
+  }
   function atualizarRelevo() {
     const frente = P_R0 - 0.3 + crescer * (P_R1 - P_R0 + 0.6); // os continentes sobem do mar, de dentro para fora
     for (let i = 0; i < nV; i++) {
       const y = vTerra[i] ? vFundo[i] + (vAlt[i] - vFundo[i]) * suave(frente, frente - 0.35, vR[i]) : vAlt[i];
-      posT.setY(i, y); alturaT[i] = y;
+      posArr[i * 3 + 1] = y; alturaT[i] = y;
     }
     posT.needsUpdate = true;
-    terrenoGeo.computeVertexNormals();
+    normaisDaGrade();
   }
   atualizarRelevo();
 
@@ -585,9 +619,26 @@ export function criarCena(palco, { reduzido }) {
     if (qualidadeBaixa || document.hidden || quadro < 90) return; // ignora o início (compilação dos shaders)
     somaDt += Math.min(dtReal, 0.1); nDt++;
     if (nDt < 120) return;
-    if (somaDt / nDt > 0.024) { qualidadeBaixa = true; luzChave.castShadow = false; redimensionar(); }
+    if (somaDt / nDt > 0.024) {
+      // Congela a sombra em vez de desligá-la: desligar a sombra recompila todos os materiais (trava ~1 s)
+      qualidadeBaixa = true; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true; redimensionar();
+    }
     somaDt = 0; nDt = 0;
   }
+  // Compila de uma vez os shaders de tudo (gelo, geada, calor, raios...) antes do primeiro quadro.
+  // Sem isso, cada objeto compila na primeira vez que aparece e o disco trava ao somar um tema.
+  // (objetos ainda em escala 0, como a placa de gelo, também: sem frustumCulled = false a câmera os pula)
+  const escondidos = [], semCorte = [];
+  cena.traverse(o => {
+    if (!o.visible) { escondidos.push(o); o.visible = true; }
+    if (o.frustumCulled) { semCorte.push(o); o.frustumCulled = false; }
+  });
+  // Um quadro de verdade pelo mesmo caminho do bloom compila exatamente as versões usadas na tela
+  // (renderer.compile sozinho compila outra variante e não resolve)
+  try { composer.render(); } catch { /* compila sob demanda, como antes */ }
+  escondidos.forEach(o => { o.visible = false; });
+  semCorte.forEach(o => { o.frustumCulled = true; });
+
   renderer.setAnimationLoop(() => {
     const dtReal = relogio.getDelta(), dt = Math.min(dtReal, 0.05);
     medirDesempenho(dtReal); quadro++;
@@ -656,7 +707,7 @@ export function criarCena(palco, { reduzido }) {
     if (pg > 0.01) {
       const pulso = reduzido ? 0.8 : 0.65 + 0.35 * Math.sin(t * 2.4);
       bordaGelo.scale.setScalar(rGelo); bordaGelo.material.opacity = pg * pulso;
-      placa.material[0].emissiveIntensity = pg * (0.05 + 0.05 * pulso); placa.material[1].emissiveIntensity = pg * 0.35;
+      placa.material[0].emissiveIntensity = pg * (0.05 + 0.05 * pulso); placa.material[1].emissiveIntensity = pg * 0.22;
       const sobe = reduzido ? 0 : t * 0.06;
       for (let i = 0; i < MAX_GEADA; i++) {
         const h = (geadaUnit[i * 3 + 1] + sobe) % 1;
@@ -664,7 +715,7 @@ export function criarCena(palco, { reduzido }) {
         geadaPos[i * 3 + 1] = AGUA + 0.04 + h * 0.5;
       }
       geadaGeo.attributes.position.needsUpdate = true;
-      geadaMat.opacity = pg * (reduzido ? 0.7 : 0.55 + 0.45 * Math.sin(t * 5));
+      geadaMat.opacity = pg * (reduzido ? 0.45 : 0.35 + 0.25 * Math.sin(t * 5));
     }
 
     // Temperatura também tinge o mar
@@ -717,7 +768,7 @@ export function criarCena(palco, { reduzido }) {
     // Halo
     corHaloAlvo.copy(corHaloBase);
     if (presenca.temp > 0.01) corHaloAlvo.lerp(cor, 0.6 * presenca.temp);
-    if (presenca.gelo > 0.01) corHaloAlvo.lerp(FRIO, 0.5 * presenca.gelo);
+    if (presenca.gelo > 0.01) corHaloAlvo.lerp(FRIO, 0.35 * presenca.gelo);
     halo.material.color.lerp(corHaloAlvo, amort(3, dt));
 
     // Agulha e sulco atual

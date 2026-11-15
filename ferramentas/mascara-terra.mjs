@@ -14,5 +14,8 @@ for (const f of readdirSync(pasta).filter(f => /^\d{8}\.png$/.test(f))) {
     if (b > r + 15 && b >= g && r + g + b < 330) mar[j * 360 + i] = 1;
   }
 }
+// Logotipo da NASA no canto superior esquerdo dos quadros (77°N a 90°N, 180°W a 116°W):
+// ali não há terra (é o Oceano Ártico ao norte do Alasca), então vira mar.
+for (let j = 0; j < 13; j++) for (let i = 0; i < 64; i++) mar[j * 360 + i] = 1;
 writeFileSync(saida, JSON.stringify({ linhas: 180, colunas: 360, nota: 'linha 0 = 89,5°N; coluna 0 = 179,5°W; 1 = terra', terra: Array.from(mar, v => 1 - v).join('') }));
 console.log('terra:', Array.from(mar).filter(v => !v).length, 'de', mar.length);

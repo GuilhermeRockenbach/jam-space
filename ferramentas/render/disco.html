@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Renderiza só o disco 3D, sem interface, para imagens de apresentação.
+     Uso: http://localhost:5180/ferramentas/render/disco.html?c=temp,raios,luzes,gelo,chuva&raio=1
+     (servir a pasta do projeto; a página usa o código de site/ pelo <base>) -->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <base href="/site/">
+  <title>Render do disco</title>
+  <style>html, body { margin: 0; height: 100%; background: #0a1030; overflow: hidden; } #palco { position: fixed; inset: 0; } canvas { width: 100%; height: 100%; display: block; }</style>
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  } }
+  </script>
+</head>
+<body>
+  <div id="palco"><canvas></canvas></div>
+  <script type="module">
+    import { criarCena } from './cena.js';
+    const q = new URLSearchParams(location.search);
+    const camadas = (q.get('c') || 'temp,raios,luzes,gelo,chuva').split(',');
+    const cena = criarCena(document.getElementById('palco'), { reduzido: false });
+    cena.definirCamadas(camadas);
+    // Valores reais: mundo em 2023 (temperatura, raios, luzes) e gelo de jun. de 2021; chuva de um dos quadros do SVS 5149
+    cena.definirValores({ temp: +(q.get('temp') || 1.03), raios: 0.75, luzes: 0.85, gelo: +(q.get('gelo') || 0.74), chuva: 0.3 });
+    cena.definirProgresso(+(q.get('p') || 0.55), true);
+    cena.definirTocando(true);
+    if (q.get('raio')) for (const ms of [5200, 5600, 6000, 6400, 6800, 7200, 7600]) cena.raio(ms);
+  </script>
+</body>
+</html>

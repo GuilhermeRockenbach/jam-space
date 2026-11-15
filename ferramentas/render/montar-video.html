@@ -1,0 +1,101 @@
+<!doctype html>
+<!-- Junta os quadros e o som gravados por gravar-quadros.mjs num vídeo WebM (VP8 + Opus) de 30 qps exatos.
+     Uso: montar-video.html#/entregas/_quadros   → o vídeo fica em window.__res (base64) e o título vira "pronto".
+     Sem tempo real: cada quadro é codificado com o horário certo (WebCodecs) e o arquivo WebM é escrito aqui
+     mesmo, então o resultado não depende da carga da máquina. -->
+<html lang="pt-BR"><head><meta charset="utf-8"><title>montando</title></head>
+<body>
+<script type="module">
+window.addEventListener('error', e => { window.__erro = String(e.message); });
+window.addEventListener('unhandledrejection', e => { window.__erro = String(e.reason); });
+const etapa = t => { window.__etapa = t; };
+const pasta = location.hash.slice(1), FPS = 30, W = 1280, H = 720;
+
+/* ---------- Entrada: índice, quadros (JPEG) e som ---------- */
+etapa('índice');
+const indice = await (await fetch(`${pasta}/indice.json`)).json();
+const baixar = async url => { for (let n = 0; ; n++) { try { const r = await fetch(url); if (r.ok) return await r.blob(); } catch (e) { if (n > 4) throw e; } await new Promise(r => setTimeout(r, 200)); } };
+const blobs = [];
+for (let i = 0; i < indice.length; i += 24) {
+  blobs.push(...await Promise.all(indice.slice(i, i + 24).map(q => baixar(`${pasta}/${q.f}`))));
+  etapa(`baixando ${blobs.length}/${indice.length}`);
+}
+const som = await new OfflineAudioContext(2, 48000, 48000).decodeAudioData(await (await baixar(`${pasta}/som.webm`)).arrayBuffer());
+const ini = indice[0].t, fim = Math.min(indice.at(-1).t, som.duration); // começa no 1º quadro
+const total = Math.floor((fim - ini) * FPS);
+
+/* ---------- Codificadores ---------- */
+const blocos = []; // { trilha, t (ms), chave, dados }
+let descOpus = null;
+const venc = new VideoEncoder({ output: c => { const d = new Uint8Array(c.byteLength); c.copyTo(d); blocos.push({ trilha: 1, t: c.timestamp / 1000, chave: c.type === 'key', dados: d }); }, error: e => { window.__erro = 'vídeo: ' + e; } });
+venc.configure({ codec: 'vp8', width: W, height: H, bitrate: 12e6, framerate: FPS });
+const aenc = new AudioEncoder({ output: (c, m) => { if (m?.decoderConfig?.description) descOpus = new Uint8Array(m.decoderConfig.description); const d = new Uint8Array(c.byteLength); c.copyTo(d); blocos.push({ trilha: 2, t: c.timestamp / 1000, chave: true, dados: d }); }, error: e => { window.__erro = 'som: ' + e; } });
+aenc.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 192000 });
+
+/* ---------- Som: do 1º quadro em diante, em blocos de 20 ms ---------- */
+etapa('som');
+const L = som.getChannelData(0), R = som.getChannelData(som.numberOfChannels > 1 ? 1 : 0);
+const a0 = Math.round(ini * 48000), a1 = Math.min(L.length, Math.round(fim * 48000));
+for (let i = a0; i < a1; i += 960) {
+  const n = Math.min(960, a1 - i), d = new Float32Array(n * 2);
+  d.set(L.subarray(i, i + n), 0); d.set(R.subarray(i, i + n), n);
+  const ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((i - a0) / 48 * 1000), data: d });
+  aenc.encode(ad); ad.close();
+}
+
+/* ---------- Vídeo: quadro k mostra a captura mais recente até k/30 s ---------- */
+const tela = new OffscreenCanvas(W, H), g = tela.getContext('2d');
+const quadroEm = t => { let lo = 0, hi = indice.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (indice[m].t <= t) lo = m; else hi = m - 1; } return lo; };
+const cache = new Map();
+const img = async i => { if (!cache.has(i)) cache.set(i, await createImageBitmap(blobs[i])); return cache.get(i); };
+for (let k = 0; k < total; k++) {
+  const t = ini + k / FPS, i = quadroEm(t);
+  g.globalAlpha = 1; g.drawImage(await img(i), 0, 0, W, H);
+  // A captura do Chrome às vezes fica ~250 ms sem mandar quadro (num clique, por exemplo), embora a página
+  // continue a 60 qps. Nesses buracos, funde o quadro de antes com o de depois para não parecer travado.
+  const prox = indice[i + 1];
+  if (prox && prox.t - indice[i].t > 0.08) {
+    g.globalAlpha = Math.min(1, Math.max(0, (t - indice[i].t) / (prox.t - indice[i].t)));
+    g.drawImage(await img(i + 1), 0, 0, W, H); g.globalAlpha = 1;
+  }
+  const vf = new VideoFrame(tela, { timestamp: Math.round(k * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+  venc.encode(vf, { keyFrame: k % 60 === 0 }); vf.close();
+  for (const [j, b] of cache) if (j < i - 1) { b.close(); cache.delete(j); }
+  while (venc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 5));
+  if (k % 30 === 0) etapa(`quadro ${k}/${total}`);
+}
+await venc.flush(); await aenc.flush();
+
+/* ---------- WebM (Matroska) escrito à mão ---------- */
+etapa('arquivo');
+const cat = partes => { const n = partes.reduce((s, p) => s + p.length, 0), r = new Uint8Array(n); let o = 0; for (const p of partes) { r.set(p, o); o += p.length; } return r; };
+const idB = id => { const b = []; while (id > 0) { b.unshift(id & 255); id = Math.floor(id / 256); } return Uint8Array.from(b); };
+const tam = n => { const b = new Uint8Array(8); b[0] = 1; let v = n; for (let i = 7; i >= 1; i--) { b[i] = v % 256; v = Math.floor(v / 256); } return b; };
+const el = (id, ...dados) => { const d = cat(dados); return cat([idB(id), tam(d.length), d]); };
+const uint = (id, v) => { const b = []; do { b.unshift(v % 256); v = Math.floor(v / 256); } while (v > 0); return el(id, Uint8Array.from(b)); };
+const flt = (id, v) => { const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, v); return el(id, b); };
+const str = (id, s) => el(id, new TextEncoder().encode(s));
+if (!descOpus) { // cabeçalho Opus padrão, caso o codificador não forneça
+  descOpus = new Uint8Array(19); descOpus.set(new TextEncoder().encode('OpusHead')); const dv = new DataView(descOpus.buffer);
+  descOpus[8] = 1; descOpus[9] = 2; dv.setUint16(10, 312, true); dv.setUint32(12, 48000, true);
+}
+const duracaoMs = total * 1000 / FPS;
+const cabecalho = el(0x1A45DFA3, uint(0x4286, 1), uint(0x42F7, 1), uint(0x42F2, 4), uint(0x42F3, 8), str(0x4282, 'webm'), uint(0x4287, 4), uint(0x4285, 2));
+const info = el(0x1549A966, uint(0x2AD7B1, 1000000), str(0x4D80, 'Jam Space'), str(0x5741, 'Jam Space'), flt(0x4489, duracaoMs));
+const trilhas = el(0x1654AE6B,
+  el(0xAE, uint(0xD7, 1), uint(0x73C5, 1), uint(0x83, 1), str(0x86, 'V_VP8'), el(0xE0, uint(0xB0, W), uint(0xBA, H))),
+  el(0xAE, uint(0xD7, 2), uint(0x73C5, 2), uint(0x83, 2), str(0x86, 'A_OPUS'), el(0x63A2, descOpus), uint(0x56AA, 6500000), uint(0x56BB, 80000000), el(0xE1, flt(0xB5, 48000), uint(0x9F, 2))));
+blocos.sort((a, b) => a.t - b.t || a.trilha - b.trilha);
+const clusters = []; let atual = null, base = 0;
+for (const b of blocos) {
+  const t = Math.round(b.t);
+  if (!atual || (b.trilha === 1 && b.chave) || t - base > 30000) { if (atual) clusters.push(el(0x1F43B675, ...atual)); base = t; atual = [uint(0xE7, base)]; }
+  const cab = new Uint8Array(4); cab[0] = 0x80 | b.trilha; new DataView(cab.buffer).setInt16(1, t - base); cab[3] = b.chave ? 0x80 : 0;
+  atual.push(el(0xA3, cab, b.dados));
+}
+if (atual) clusters.push(el(0x1F43B675, ...atual));
+const arquivo = cat([cabecalho, el(0x18538067, info, trilhas, ...clusters)]);
+let s = ''; for (let i = 0; i < arquivo.length; i += 0x8000) s += String.fromCharCode(...arquivo.subarray(i, i + 0x8000));
+window.__res = btoa(s); etapa(`pronto: ${total} quadros`); document.title = 'pronto';
+</script>
+</body></html>

@@ -3,7 +3,7 @@
    ===================================================================== */
 import { CAMADAS, ORDEM, REGIOES, faixaDisponivel, montarPassos, textoValores, titulo, descricao, limitar, lugarDe, soGelo, soCiclo, unidadeDe, TEXTO, legendaDe } from './dados.js';
 import { iniciarMonitor, monitorCamadas, monitorTocando } from './monitor.js';
-import { iniciarAudio, tocarPasso, tocarAmostra, agora, pronto, definirAndamento, duracaoCompasso, bpmDe, silenciar, FOLGA, tocarLicao } from './audio.js';
+import { iniciarAudio, tocarPasso, tocarAmostra, agora, pronto, definirAndamento, duracaoCompasso, bpmDe, silenciar, FOLGA, tocarLicao, prepararAudio } from './audio.js';
 
 const $ = id => document.getElementById(id);
 const reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -167,8 +167,17 @@ function alternar(id) {
     aviso = `${CAMADAS[id].nome} entrou: toca em ciclo os dados de ${CAMADAS[id].periodo}, junto com os outros temas.`;
   }
   estado.rec.inicio = estado.rec.fim = null;
-  atualizar();
-  if (!tinha) { tocarAmostra(id, aoRaio); cenaFaz('onda', CAMADAS[id].cor); }
+  // Tocando: a música segue sem parar, já com o tema novo, a partir do mesmo ano (se ele existir na nova faixa)
+  const seguir = estado.tocando ? estado.passos[estado.atual]?.rotulo : null;
+  atualizar(seguir !== null);
+  if (seguir !== null && estado.passos.length) {
+    const i = estado.passos.findIndex(p => p.rotulo === seguir);
+    estado.proximo = i >= 0 ? i : 0;
+    tocar(true);
+    if (!tinha) cenaFaz('onda', CAMADAS[id].cor);
+  } else if (seguir !== null) {   // tirou o último tema: o disco para
+    cenaFaz('definirTocando', false); atualizarPlay();
+  } else if (!tinha) { tocarAmostra(id, aoRaio); cenaFaz('onda', CAMADAS[id].cor); }
   mudanca(aviso || (tinha
     ? `${CAMADAS[id].nome} saiu: o ${CAMADAS[id].som} parou de tocar.`
     : `${CAMADAS[id].nome} entrou: agora toca ${CAMADAS[id].som}.`));
@@ -184,8 +193,8 @@ function preencherAnos(sel, lo, hi, valor) {
   sel.value = valor;
 }
 
-function atualizar() {
-  if (estado.tocando) pausar(false);
+function atualizar(trocaSuave = false) {
+  if (estado.tocando) pausar(false, true, trocaSuave);
   const { rec } = estado;
   const faixa = faixaDisponivel(rec.camadas.length ? rec.camadas : ['temp']);
   const anual = rec.camadas.length > 0 && !soCiclo(rec.camadas) && faixa.lo <= faixa.hi;
@@ -321,28 +330,31 @@ function depois(ms, f) {
   timersTela.add(id);
 }
 
-async function tocar() {
+async function tocar(emendar = false) {
   if (!estado.passos.length) return;
   await iniciarAudio();          // no celular, espera o som destravar antes de agendar
   if (estado.tocando) return;    // dois toques rápidos no play não começam duas vezes
-  silenciar();
+  if (!emendar) silenciar();     // numa troca de tema o corte suave já foi feito
   if (estado.proximo >= estado.passos.length) estado.proximo = 0;
   estado.tocando = true; monitorTocando(true);
   estado.compassoN = 0;
   definirAndamento(retrato() ? durDe(estado.media) : durDe(estado.passos[estado.proximo].valores));
   if (retrato()) mostrarRetrato();
-  estado.proxT = agora() + 0.15;
+  estado.proxT = agora() + (emendar ? 0.12 : 0.15);
   estado.timer = setInterval(agendar, 50);
   agendar();
   cenaFaz('definirTocando', true);
   atualizarPlay();
 }
 
-function pausar(avisar = true, cortar = true) {
+function pausar(avisar = true, cortar = true, trocaSuave = false) {
   estado.tocando = false; monitorTocando(false);
   clearInterval(estado.timer);
   timersTela.forEach(clearTimeout); timersTela.clear();
-  if (cortar) silenciar();       // corta as notas que já estavam agendadas (no fim do disco, deixa o eco acabar)
+  // Corta as notas que já estavam agendadas (no fim do disco, deixa o eco acabar).
+  // Numa troca de tema com o disco tocando, o corte é um fade curto e o disco não para de girar.
+  if (cortar) silenciar(trocaSuave ? 0.06 : 0.025);
+  if (trocaSuave) return;
   cenaFaz('definirTocando', false);
   atualizarPlay();
   if (avisar) anunciar('Pausado.');
@@ -549,3 +561,5 @@ lerDaURL();
 ligar();
 atualizar();
 iniciarMonitor();
+// Prepara o som (pausado) quando a página fica ociosa, para o primeiro toque não travar o disco
+(window.requestIdleCallback || (f => setTimeout(f, 1500)))(prepararAudio, { timeout: 4000 });
