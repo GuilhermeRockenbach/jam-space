@@ -118,7 +118,11 @@ function texturaSprite() {
 
 export function criarCena(palco, { reduzido }) {
   const canvas = palco.querySelector('canvas');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  // Celular/tablet: sem pós-processamento (brilho/bloom). Nos chips de celular (iPhone, por exemplo)
+  // a imagem intermediária em meia precisão com antisserrilhado virava quadradinhos coloridos em
+  // volta do disco. Lá a cena é desenhada direto na tela, com o antisserrilhado do próprio navegador.
+  const semPos = matchMedia('(pointer: coarse)').matches;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: semPos, powerPreference: 'high-performance' });
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
 
@@ -564,6 +568,7 @@ export function criarCena(palco, { reduzido }) {
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.45, 1.2);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  const desenhar = () => (semPos ? renderer.render(cena, camera) : composer.render());
 
   let qualidadeBaixa = false;
   function redimensionar() {
@@ -571,7 +576,7 @@ export function criarCena(palco, { reduzido }) {
     if (!w || !h) return;
     const dpr = Math.min(window.devicePixelRatio, qualidadeBaixa ? 1 : 1.5);
     renderer.setPixelRatio(dpr); renderer.setSize(w, h, false);
-    composer.setPixelRatio(dpr); composer.setSize(w, h);
+    if (!semPos) { composer.setPixelRatio(dpr); composer.setSize(w, h); }
     camera.aspect = w / h;
     const vFov = THREE.MathUtils.degToRad(camera.fov), hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
     camera.position.copy(direcaoCamera).multiplyScalar(3.25 / Math.sin(Math.min(vFov, hFov) / 2));
@@ -639,7 +644,7 @@ export function criarCena(palco, { reduzido }) {
   });
   // Um quadro de verdade pelo mesmo caminho do bloom compila exatamente as versões usadas na tela
   // (renderer.compile sozinho compila outra variante e não resolve)
-  try { composer.render(); } catch { /* compila sob demanda, como antes */ }
+  try { desenhar(); } catch { /* compila sob demanda, como antes */ }
   escondidos.forEach(o => { o.visible = false; });
   semCorte.forEach(o => { o.frustumCulled = true; });
 
@@ -783,7 +788,7 @@ export function criarCena(palco, { reduzido }) {
     braco.rotation.y = lerp(braco.rotation.y, -anguloPara(rAgulha), amort(5, dt));
     braco.rotation.z = lerp(braco.rotation.z, tocando ? 0 : 0.05, amort(4, dt));
 
-    composer.render();
+    desenhar();
   });
 
   return {
