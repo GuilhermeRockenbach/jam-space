@@ -135,7 +135,7 @@ export function criarCena(palco, { reduzido }) {
   const luzChave = new THREE.DirectionalLight(0xfff0dc, 1.9); luzChave.position.set(-4, 6, 3); cena.add(luzChave);
   if (!(reduzido || matchMedia('(pointer: coarse)').matches)) {
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    luzChave.castShadow = true; luzChave.shadow.mapSize.set(2048, 2048);
+    luzChave.castShadow = true; luzChave.shadow.mapSize.set(1024, 1024);
     Object.assign(luzChave.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 16 });
     luzChave.shadow.bias = -0.0005; luzChave.shadow.normalBias = 0.02;
   }
@@ -306,8 +306,23 @@ export function criarCena(palco, { reduzido }) {
   terrenoGeo.setAttribute('color', new THREE.BufferAttribute(corT, 3));
   terrenoGeo.setIndex(idxT);
   const posT = terrenoGeo.attributes.position, nV = NV;
-  const terreno = new THREE.Mesh(terrenoGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 }));
-  terreno.castShadow = terreno.receiveShadow = !leve;
+  // Cor base fica fixa na malha; a tinta da temperatura é aplicada na placa de vídeo (uniform),
+  // então mudar a temperatura não obriga a recalcular os ~100 mil vértices.
+  const tingir = new Float32Array(NV);
+  for (let i = 0; i < NV; i++) {
+    corT[i * 3] = vBase[i * 3]; corT[i * 3 + 1] = vBase[i * 3 + 1]; corT[i * 3 + 2] = vBase[i * 3 + 2];
+    tingir[i] = vTerra[i] && !vPolar[i] ? 1 - vMonte[i] * 0.5 : 0;
+  }
+  terrenoGeo.setAttribute('tingir', new THREE.BufferAttribute(tingir, 1));
+  const uTinta = { uCorTerra: { value: new THREE.Color() }, uMistura: { value: 0 } };
+  const matTerreno = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 });
+  matTerreno.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, uTinta);
+    sh.vertexShader = 'attribute float tingir;\nuniform vec3 uCorTerra;\nuniform float uMistura;\n' +
+      sh.vertexShader.replace('#include <color_vertex>', '#include <color_vertex>\n  vColor.rgb = mix(vColor.rgb, uCorTerra, uMistura * tingir);');
+  };
+  const terreno = new THREE.Mesh(terrenoGeo, matTerreno);
+  terreno.castShadow = false; terreno.receiveShadow = !leve; // o relevo é baixo: projetar sombra nele mesmo custava uma passada inteira
   disco.add(terreno);
   const alturaT = new Float32Array(nV); // reaproveitado pelas cidades
 
@@ -533,10 +548,11 @@ export function criarCena(palco, { reduzido }) {
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
+  let qualidadeBaixa = false;
   function redimensionar() {
     const w = palco.clientWidth, h = palco.clientHeight;
     if (!w || !h) return;
-    const dpr = Math.min(window.devicePixelRatio, w < 700 ? 1.5 : 2);
+    const dpr = Math.min(window.devicePixelRatio, qualidadeBaixa ? 1 : 1.5);
     renderer.setPixelRatio(dpr); renderer.setSize(w, h, false);
     composer.setPixelRatio(dpr); composer.setSize(w, h);
     camera.aspect = w / h;
@@ -548,46 +564,33 @@ export function criarCena(palco, { reduzido }) {
   new ResizeObserver(redimensionar).observe(palco);
   redimensionar();
 
-  /* ---------- Atualiza o relevo e as cores do terreno ---------- */
-  function atualizarTerreno() {
-    const pt = presenca.temp;
+  /* ---------- Relevo: só muda quando os continentes sobem ou descem ---------- */
+  function atualizarRelevo() {
     const frente = P_R0 - 0.3 + crescer * (P_R1 - P_R0 + 0.6); // os continentes sobem do mar, de dentro para fora
-    const rOnda = R_ROTULO + (R * 1.15 - R_ROTULO) * (1 - Math.pow(1 - ondaT, 3));
-    const forcaOnda = ondaT < 1 ? (1 - ondaT) * 0.04 : 0;
-    const tn = Math.min(1, Math.max(0, (atual.temp + 0.4) / 1.8));
-    if (pt > 0.01) corTerra.copy(TERRA_FRIA).lerp(TERRA_QUENTE, tn); else corTerra.copy(TERRA_NEUTRA);
-    const mistura = 0.65 * pt;
     for (let i = 0; i < nV; i++) {
-      const r = vR[i];
-      let y;
-      if (vTerra[i]) {
-        const surgiu = suave(frente, frente - 0.35, r);
-        y = vFundo[i] + (vAlt[i] - vFundo[i]) * surgiu;
-        tmpCor.setRGB(vBase[i * 3], vBase[i * 3 + 1], vBase[i * 3 + 2]);
-        if (mistura > 0.001 && !vPolar[i]) tmpCor.lerp(corTerra, mistura * (1 - vMonte[i] * 0.5));
-      } else {
-        y = vAlt[i];
-        tmpCor.setRGB(vBase[i * 3], vBase[i * 3 + 1], vBase[i * 3 + 2]);
-      }
-      if (forcaOnda) y += forcaOnda * Math.exp(-Math.pow((r - rOnda) / 0.14, 2)) * (vTerra[i] ? 1 : 0.3);
-      posT.setY(i, y);
-      alturaT[i] = y;
-      corT[i * 3] = tmpCor.r; corT[i * 3 + 1] = tmpCor.g; corT[i * 3 + 2] = tmpCor.b;
+      const y = vTerra[i] ? vFundo[i] + (vAlt[i] - vFundo[i]) * suave(frente, frente - 0.35, vR[i]) : vAlt[i];
+      posT.setY(i, y); alturaT[i] = y;
     }
     posT.needsUpdate = true;
-    terrenoGeo.attributes.color.needsUpdate = true;
     terrenoGeo.computeVertexNormals();
-    // Placa de gelo: tamanho do mês (fração do maior), aparece com o tema
-    const pg = presenca.gelo;
-    placa.visible = pg > 0.01;
-    if (placa.visible) { const k = geloRaio(atual.gelo) / rPlacaMax * Math.min(1, pg * 1.2); placa.scale.set(k, Math.max(0.05, pg), k); }
   }
+  atualizarRelevo();
 
   /* ---------- Laço de animação ---------- */
   const relogio = new THREE.Clock();
-  let terrenoParado = 0;
+  let crescerFeito = -1, quadro = 0;
+  // Qualidade adaptativa: se a média passar de ~24 ms por quadro, baixa a resolução e tira a sombra
+  let somaDt = 0, nDt = 0;
+  function medirDesempenho(dtReal) {
+    if (qualidadeBaixa || document.hidden || quadro < 90) return; // ignora o início (compilação dos shaders)
+    somaDt += Math.min(dtReal, 0.1); nDt++;
+    if (nDt < 120) return;
+    if (somaDt / nDt > 0.024) { qualidadeBaixa = true; luzChave.castShadow = false; redimensionar(); }
+    somaDt = 0; nDt = 0;
+  }
   renderer.setAnimationLoop(() => {
-    const dt = Math.min(relogio.getDelta(), 0.05);
+    const dtReal = relogio.getDelta(), dt = Math.min(dtReal, 0.05);
+    medirDesempenho(dtReal); quadro++;
     const t = relogio.elapsedTime;
     let mudou = false;
 
@@ -614,8 +617,16 @@ export function criarCena(palco, { reduzido }) {
       mudou = true;
     }
 
-    // Terreno: só recalcula enquanto algo muda
-    if (mudou || terrenoParado < 2) { atualizarTerreno(); terrenoParado = mudou ? 0 : terrenoParado + 1; }
+    // Relevo: só recalcula enquanto os continentes sobem ou descem (e no máximo a cada 2 quadros)
+    const dc = Math.abs(crescer - crescerFeito);
+    if (dc > 0.004 && quadro % 2 === 0 || (dc > 1e-4 && (crescer > 0.995 || crescer < 0.005))) { atualizarRelevo(); crescerFeito = crescer; }
+    // Cor da terra pela temperatura: só dois números para a placa de vídeo
+    const tn = Math.min(1, Math.max(0, (atual.temp + 0.4) / 1.8));
+    if (presenca.temp > 0.01) corTerra.copy(TERRA_FRIA).lerp(TERRA_QUENTE, tn); else corTerra.copy(TERRA_NEUTRA);
+    uTinta.uCorTerra.value.copy(corTerra); uTinta.uMistura.value = 0.65 * presenca.temp;
+    // Placa de gelo: tamanho do mês (fração do maior), aparece com o tema
+    placa.visible = presenca.gelo > 0.01;
+    if (placa.visible) { const k = geloRaio(atual.gelo) / rPlacaMax * Math.min(1, presenca.gelo * 1.2); placa.scale.set(k, Math.max(0.05, presenca.gelo), k); }
     terreno.visible = agua.visible = crescer > 0.002 || presenca.gelo > 0.002;
 
     // Temperatura: brilho nos sulcos + faíscas
