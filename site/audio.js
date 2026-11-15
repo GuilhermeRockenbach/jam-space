@@ -27,7 +27,7 @@ let ger = null;
 /* Celular: menos vozes e reverb mais curto (menos carga = sem estalos),
    e mais folga no agendamento, porque o 3D disputa o processador. */
 export const LEVE = matchMedia('(pointer: coarse)').matches || (navigator.hardwareConcurrency || 8) <= 4;
-export const FOLGA = LEVE ? 0.6 : 0.25; // segundos de música agendados à frente
+export const FOLGA = LEVE ? 0.6 : 0.4; // segundos de música agendados à frente
 
 export const agora = () => (ctx ? ctx.currentTime : 0);
 export const pronto = () => !!ctx && ctx.state === 'running';
@@ -75,14 +75,18 @@ export function iniciarAudio() {
     if (ctx.state !== 'running') { destravarIOS(); return ctx.resume().catch(() => {}); }
     return Promise.resolve();
   }
-  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: LEVE ? 'playback' : 'interactive' });
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: LEVE ? 'playback' : 'balanced' });
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -18; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.2;
   const quente = ctx.createBiquadFilter(); quente.type = 'highshelf'; quente.frequency.value = 6000; quente.gain.value = -4; // tira o chiado
-  comp.connect(quente); quente.connect(ctx.destination);
+  // Limitador: segura os picos quando muitos instrumentos tocam juntos (evita distorção)
+  const limitador = ctx.createDynamicsCompressor();
+  limitador.threshold.value = -3; limitador.knee.value = 0; limitador.ratio.value = 20;
+  limitador.attack.value = 0.002; limitador.release.value = 0.12;
+  comp.connect(quente); quente.connect(limitador); limitador.connect(ctx.destination);
   // Analisador para o monitor do som (espectro e volume): só escuta, não muda o som
   an = ctx.createAnalyser(); an.fftSize = 8192; an.smoothingTimeConstant = 0.75; an.minDecibels = -100; an.maxDecibels = -20;
-  quente.connect(an);
+  limitador.connect(an);
   entrada = comp;
 
   reverb = ctx.createConvolver(); reverb.buffer = impulso(LEVE ? 1.8 : 3.4);
@@ -178,8 +182,9 @@ function notasDoAcorde(pcs, de, ate) { const r = []; for (let m = de; m <= ate; 
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
 function saida(no, { pan = 0, rev = 0.25, eco: e = 0 }) {
-  const p = ctx.createStereoPanner(); p.pan.value = pan;
-  no.connect(p); p.connect(ger.seco);
+  let p = no;
+  if (pan) { p = ctx.createStereoPanner(); p.pan.value = pan; no.connect(p); }
+  p.connect(ger.seco);
   if (rev) { const s = ctx.createGain(); s.gain.value = rev; p.connect(s); s.connect(ger.rev); }
   if (e) { const s = ctx.createGain(); s.gain.value = e; p.connect(s); s.connect(ger.eco); }
 }
@@ -208,16 +213,18 @@ function voz({ midi, t, dur, tipo = 'sine', vol = 0.2, ataque = 0.01, soltura = 
 }
 
 // Piano elétrico: fundamental + 2º harmônico que some rápido
-function piano({ midi, t, vol = 0.05, dur = 1.2, ...destino }) {
+function piano({ midi, t, vol = 0.05, dur = 1.2, simples = false, ...destino }) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.006);
   g.gain.setTargetAtTime(0.0001, t + 0.02, dur / 3);
   const o1 = ctx.createOscillator(); o1.frequency.value = mtof(midi);
-  const o2 = ctx.createOscillator(); o2.frequency.value = mtof(midi) * 2;
-  const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.35, t); g2.gain.setTargetAtTime(0.0001, t, 0.08);
-  o1.connect(g); o2.connect(g2); g2.connect(g);
+  o1.connect(g); o1.start(t); o1.stop(t + dur + 0.3);
+  if (!simples) { // 2º harmônico: o "ataque" do piano; nas notas repetidas rápidas, dispensável
+    const o2 = ctx.createOscillator(); o2.frequency.value = mtof(midi) * 2;
+    const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.35, t); g2.gain.setTargetAtTime(0.0001, t, 0.08);
+    o2.connect(g2); g2.connect(g); o2.start(t); o2.stop(t + 0.5);
+  }
   saida(g, destino);
-  o1.start(t); o2.start(t); o1.stop(t + dur + 0.3); o2.stop(t + dur + 0.3);
 }
 
 // Sino: parciais inarmônicos, decaimento longo
@@ -283,7 +290,7 @@ function caixa(t, vol) {
   ruido({ t, dur: 0.16, vol, freq: 2200, q: 0.7, rev: 0.4 });
   voz({ midi: 55, t, dur: 0.03, soltura: 0.08, tipo: 'triangle', vol: vol * 0.5, rev: 0.2 });
 }
-function chimbal(t, vol, pan = 0.25) { ruido({ t, dur: 0.045, vol, freq: 9000, tipo: 'highpass', q: 0.5, pan, rev: 0.05 }); }
+function chimbal(t, vol, pan = 0.25) { ruido({ t, dur: 0.045, vol, freq: 9000, tipo: 'highpass', q: 0.5, pan, rev: 0 }); }
 
 function euclides(k, n) {
   const r = [];
@@ -331,16 +338,16 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
     // A urgência vem do ritmo, não de notas que brigam: só notas do acorde.
     if (energia === 3) {
       const cordas = voicing(acorde, 74).slice(0, 2);
-      for (let k = 0; k < 8; k += LEVE ? 2 : 1) cordas.forEach((m, i) => voz({
-        midi: m, t: t + k * tempo / 2, dur: tempo * 0.42, tipo: 'sawtooth', vol: 0.011 * mix, ataque: 0.02, soltura: 0.08,
+      for (let k = 0; k < 8; k += LEVE ? 2 : 1) { const i = k % 2; voz({
+        midi: cordas[i], t: t + k * tempo / 2, dur: tempo * 0.42, tipo: 'sawtooth', vol: 0.016 * mix, ataque: 0.02, soltura: 0.08,
         corte: 2200, q: 0.7, pan: i ? 0.35 : -0.35, rev: 0.35,
-      }));
+      }); }
     }
     // Piano elétrico: frio = um acorde por compasso; quente = sincopado e repetido
     const notasPiano = voicing(acorde, 60).slice(0, LEVE ? 3 : 4);
     const golpes = [[0], [0, 1.5, 3], [0, 1, 1.5, 2.5, 3], [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]][energia];
-    golpes.forEach((b, k) => notasPiano.forEach((m, i) => piano({
-      midi: m, t: t + b * tempo + i * 0.008, vol: k === 0 ? 0.045 : 0.026, dur: energia === 0 ? 2.4 : 0.8, pan: -0.2, rev: 0.3,
+    golpes.forEach((b, k) => (k === 0 ? notasPiano : notasPiano.slice(-2)).forEach((m, i) => piano({
+      midi: m, t: t + b * tempo + i * 0.008, vol: k === 0 ? 0.045 : 0.03, dur: energia === 0 ? 2.4 : 0.8, simples: k > 0, pan: -0.2, rev: 0.3,
     })));
     // Baixo: frio = uma nota longa; quente = linha andante em colcheias
     const raiz = voicing([acorde[0]], 38)[0];
@@ -351,7 +358,7 @@ export function tocarPasso(v, t, dur, aoRaio = () => {}, { base = true, compasso
     ];
     linhas[Math.min(2, energia)].forEach(([b, m, d]) => {
       voz({ midi: m, t: t + b * tempo, dur: d * tempo * 0.9, tipo: 'triangle', vol: 0.2, soltura: 0.1, corte: 500 + tn * 600, rev: 0.03 });
-      if (!LEVE) voz({ midi: m - 12, t: t + b * tempo, dur: d * tempo * 0.9, vol: 0.18, soltura: 0.1, rev: 0 });
+      if (!LEVE && energia < 2) voz({ midi: m - 12, t: t + b * tempo, dur: d * tempo * 0.9, vol: 0.18, soltura: 0.1, rev: 0 });
     });
     // Bateria: frio = quase nada; quente = bumbo em todo tempo e chimbal em semicolcheias
     if (!inicioMusica) {
