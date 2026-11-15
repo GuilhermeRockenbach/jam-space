@@ -4,6 +4,7 @@
 import { CAMADAS, ORDEM, REGIOES, faixaDisponivel, montarPassos, textoValores, titulo, descricao, limitar, lugarDe, soGelo, soCiclo, unidadeDe, TEXTO, legendaDe } from './dados.js';
 import { iniciarMonitor, monitorCamadas, monitorTocando } from './monitor.js';
 import { iniciarAudio, tocarPasso, tocarAmostra, agora, pronto, definirAndamento, duracaoCompasso, bpmDe, silenciar, FOLGA, tocarLicao, prepararAudio } from './audio.js';
+import { L, LOCALE, VOZ, aplicarIdioma, trocarIdioma } from './lingua.js';
 
 const $ = id => document.getElementById(id);
 const reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -60,7 +61,7 @@ function mediaDe(passos) {
 /* ---------- Cena 3D (com plano B se não houver WebGL) ---------- */
 let cena = null;
 try {
-  const { criarCena } = await import('./cena.js?v=5'); // ?v= força o celular a baixar a versão nova
+  const { criarCena } = await import('./cena.js?v=6'); // ?v= força o celular a baixar a versão nova
   cena = criarCena($('palco'), { reduzido });
 } catch (e) {
   console.warn('3D indisponível:', e);
@@ -75,7 +76,7 @@ function anunciar(msg) {
   setTimeout(() => { el.textContent = msg; }, 30);
   if ($('voz').checked && 'speechSynthesis' in window) {
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(msg); u.lang = 'pt-BR';
+    const u = new SpeechSynthesisUtterance(msg); u.lang = VOZ;
     speechSynthesis.speak(u);
   }
 }
@@ -96,8 +97,8 @@ function montar() {
     b.type = 'button'; b.className = 'camada'; b.dataset.id = id;
     b.style.setProperty('--cor', c.cor);
     b.setAttribute('aria-pressed', 'false');
-    const periodo = c.ciclo ? c.periodo : `${c.inicio} a ${c.fim}`;
-    b.setAttribute('aria-label', `${c.nome}, toca ${c.som}, dados de ${periodo}`);
+    const periodo = c.ciclo ? c.periodo : L(`${c.inicio} a ${c.fim}`, `${c.inicio} to ${c.fim}`);
+    b.setAttribute('aria-label', L(`${c.nome}, toca ${c.som}, dados de ${periodo}`, `${c.nome}, plays ${c.som}, data from ${periodo}`));
     b.innerHTML = `<span class="disco-mini"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg></span>`
       + `<span class="rotulo">${c.nome}<span class="estado" aria-hidden="true">${c.som}</span></span>`;
     b.addEventListener('click', () => {
@@ -164,7 +165,8 @@ function alternar(id) {
   if (tinha) estado.rec.camadas = estado.rec.camadas.filter(c => c !== id);
   else estado.rec.camadas = [...estado.rec.camadas, id];
   if (!tinha && CAMADAS[id].ciclo && !soCiclo(estado.rec.camadas)) {
-    aviso = `${CAMADAS[id].nome} entrou: toca em ciclo os dados de ${CAMADAS[id].periodo}, junto com os outros temas.`;
+    aviso = L(`${CAMADAS[id].nome} entrou: toca em ciclo os dados de ${CAMADAS[id].periodo}, junto com os outros temas.`,
+      `${CAMADAS[id].nome} joined: it loops the data from ${CAMADAS[id].periodo}, together with the other layers.`);
   }
   estado.rec.inicio = estado.rec.fim = null;
   // Tocando: a música segue sem parar, já com o tema novo, a partir do mesmo ano (se ele existir na nova faixa)
@@ -179,9 +181,9 @@ function alternar(id) {
     cenaFaz('definirTocando', false); atualizarPlay();
   } else if (!tinha) { tocarAmostra(id, aoRaio); cenaFaz('onda', CAMADAS[id].cor); }
   mudanca(aviso || (tinha
-    ? `${CAMADAS[id].nome} saiu: o ${CAMADAS[id].som} parou de tocar.`
-    : `${CAMADAS[id].nome} entrou: agora toca ${CAMADAS[id].som}.`));
-  anunciar(`${CAMADAS[id].nome} ${tinha ? 'saiu do' : 'entrou no'} disco. ${aviso} ${descricao(estado.rec, estado.passos, estado.conflito, segPorPasso())}`);
+    ? L(`${CAMADAS[id].nome} saiu: o ${CAMADAS[id].som} parou de tocar.`, `${CAMADAS[id].nome} left: the ${CAMADAS[id].som} stopped.`)
+    : L(`${CAMADAS[id].nome} entrou: agora toca ${CAMADAS[id].som}.`, `${CAMADAS[id].nome} joined: now playing ${CAMADAS[id].som}.`)));
+  anunciar(`${CAMADAS[id].nome} ${tinha ? L('saiu do disco', 'left the disc') : L('entrou no disco', 'joined the disc')}. ${aviso} ${descricao(estado.rec, estado.passos, estado.conflito, segPorPasso())}`);
 }
 
 function preencherAnos(sel, lo, hi, valor) {
@@ -223,7 +225,7 @@ function atualizar(trocaSuave = false) {
   document.querySelectorAll('.camada').forEach(b => {
     const ligado = rec.camadas.includes(b.dataset.id);
     b.setAttribute('aria-pressed', String(ligado));
-    b.querySelector('.estado').textContent = ligado ? 'no disco' : CAMADAS[b.dataset.id].som;
+    b.querySelector('.estado').textContent = ligado ? L('no disco', 'on the disc') : CAMADAS[b.dataset.id].som;
   });
   $('dica').classList.toggle('some', rec.camadas.length > 0);
   $('descricao').textContent = descricao(rec, estado.passos, estado.conflito, segPorPasso());
@@ -235,14 +237,14 @@ function atualizar(trocaSuave = false) {
   cenaFaz('definirRotulo', { texto: titulo(rec, estado.passos), cor: primeira ? CAMADAS[primeira].cor : '#2848a8' });
 
   // Resumo do disco: o que você está montando
-  $('receita-titulo').textContent = n ? titulo(rec, estado.passos) : 'Disco vazio';
+  $('receita-titulo').textContent = n ? titulo(rec, estado.passos) : L('Disco vazio', 'Empty disc');
   const unid = unidadeDe(rec.camadas);
-  estado.subPadrao = !n ? (estado.conflito || 'A Terra também pode ser ouvida. Toque num tema ou arraste para o disco.')
-    : retrato() ? `Retrato: a média de ${n} ${unid} vira uma música em loop · ${bpmDe(estado.media)} batidas por minuto`
-    : `${n} ${unid} = ${n} compassos de música · ${duracao()}`;
+  estado.subPadrao = !n ? (estado.conflito || L('A Terra também pode ser ouvida. Toque num tema ou arraste para o disco.', 'The Earth can be heard too. Tap a layer or drag it onto the disc.'))
+    : retrato() ? L(`Retrato: a média de ${n} ${unid} vira uma música em loop · ${bpmDe(estado.media)} batidas por minuto`, `Portrait: the average of ${n} ${unid} becomes one looping piece · ${bpmDe(estado.media)} beats per minute`)
+    : L(`${n} ${unid} = ${n} compassos de música · ${duracao()}`, `${n} ${unid} = ${n} bars of music · ${duracao()}`);
   $('receita-sub').textContent = estado.subPadrao;
   const periodoTxt = anual ? `${rec.inicio}–${rec.fim}` : (n > 1 ? `${estado.passos[0].curto}–${estado.passos[n - 1].curto}` : '');
-  $('resumo-ajustes').textContent = [lugarDe(rec), periodoTxt, retrato() ? 'retrato' : 'ano a ano'].filter(Boolean).join(' · ');
+  $('resumo-ajustes').textContent = [lugarDe(rec), periodoTxt, retrato() ? L('retrato', 'portrait') : L('ano a ano', 'year by year')].filter(Boolean).join(' · ');
 
   if (n && retrato()) mostrarRetrato(true);
   else if (n) mostrar(0, false, true);
@@ -274,7 +276,7 @@ function mudanca(msg) {
 }
 
 /* Medidores: o valor de cada camada no passo atual, com a cor do instrumento */
-const fmtTemp = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'always' });
+const fmtTemp = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'always' });
 const MEDIDA = {
   temp: v => ({ pct: limitar((v + 0.6) / 2.4, 0, 1), txt: `${fmtTemp.format(v)} °C` }),
   raios: v => ({ pct: v, txt: TEXTO.raios(v) }),
@@ -298,7 +300,7 @@ function mostrar(i, automatico, silencioso = false) {
   estado.atual = i;
   const texto = textoValores(p.valores);
   $('ano').textContent = p.rotulo;
-  $('compasso').textContent = `compasso ${i + 1} de ${estado.passos.length}`;
+  $('compasso').textContent = L(`compasso ${i + 1} de ${estado.passos.length}`, `bar ${i + 1} of ${estado.passos.length}`);
   desenharMedidores(p.valores, p);
   const linha = $('linha');
   linha.value = i;
@@ -314,12 +316,12 @@ function mostrar(i, automatico, silencioso = false) {
 function mostrarRetrato(silencioso = false) {
   const p = estado.passos, m = estado.media;
   if (!p.length) return;
-  const periodo = p.length > 1 ? `${p[0].rotulo} a ${p[p.length - 1].rotulo}` : p[0].rotulo;
+  const periodo = p.length > 1 ? L(`${p[0].rotulo} a ${p[p.length - 1].rotulo}`, `${p[0].rotulo} to ${p[p.length - 1].rotulo}`) : p[0].rotulo;
   $('ano').textContent = p.length > 1 ? `${p[0].curto}–${p[p.length - 1].curto}` : p[0].curto;
-  $('compasso').textContent = `média de ${p.length} ${unidadeDe(estado.rec.camadas)}`;
+  $('compasso').textContent = L(`média de ${p.length} ${unidadeDe(estado.rec.camadas)}`, `average of ${p.length} ${unidadeDe(estado.rec.camadas)}`);
   desenharMedidores(m);
   cenaFaz('definirValores', m);
-  if (!silencioso) anunciar(`Retrato de ${periodo}, em média: ${textoValores(m)}.`);
+  if (!silencioso) anunciar(L(`Retrato de ${periodo}, em média: ${textoValores(m)}.`, `Portrait of ${periodo}, on average: ${textoValores(m)}.`));
 }
 
 /* ---------- Reprodução ---------- */
@@ -357,7 +359,7 @@ function pausar(avisar = true, cortar = true, trocaSuave = false) {
   if (trocaSuave) return;
   cenaFaz('definirTocando', false);
   atualizarPlay();
-  if (avisar) anunciar('Pausado.');
+  if (avisar) anunciar(L('Pausado.', 'Paused.'));
 }
 
 function agendar() {
@@ -380,7 +382,7 @@ function agendar() {
     if (estado.proximo >= estado.passos.length) {
       clearInterval(estado.timer);
       const fimEm = (estado.proxT - agora()) * 1000;
-      depois(fimEm, () => { if (estado.tocando) { pausar(false, false); anunciar('Fim do disco.'); } });
+      depois(fimEm, () => { if (estado.tocando) { pausar(false, false); anunciar(L('Fim do disco.', 'End of the disc.')); } });
       return;
     }
     const i = estado.proximo;
@@ -396,7 +398,7 @@ function atualizarPlay() {
   const b = $('play'), ha = estado.passos.length > 0;
   b.disabled = !ha;
   b.classList.toggle('tocando', estado.tocando);
-  b.setAttribute('aria-label', estado.tocando ? 'Pausar' : (ha ? `Tocar o disco: ${titulo(estado.rec, estado.passos)}` : 'Tocar'));
+  b.setAttribute('aria-label', estado.tocando ? L('Pausar', 'Pause') : (ha ? L(`Tocar o disco: ${titulo(estado.rec, estado.passos)}`, `Play the disc: ${titulo(estado.rec, estado.passos)}`) : L('Tocar', 'Play')));
 }
 
 /* ---------- URL: mesma receita, mesma música ---------- */
@@ -406,7 +408,7 @@ function salvarNaURL() {
   if (r.regiao !== 'mundo') partes.push(`r=${r.regiao}`);
   if (r.inicio !== null && !soCiclo(r.camadas)) partes.push(`p=${r.inicio}-${r.fim}`);
   if (retrato()) partes.push('m=retrato');
-  history.replaceState(null, '', partes.length ? `#${partes.join('&')}` : location.pathname);
+  history.replaceState(null, '', location.pathname + location.search + (partes.length ? `#${partes.join('&')}` : ''));
 }
 
 function lerDaURL() {
@@ -424,6 +426,7 @@ function lerDaURL() {
 /* ---------- Eventos ---------- */
 function ligar() {
   $('play').addEventListener('click', () => (estado.tocando ? pausar() : tocar()));
+  $('trocar-lingua').addEventListener('click', trocarIdioma);
 
   // Linha do tempo: ao arrastar, a tela acompanha na hora, mas o som toca no máximo
   // a cada 220 ms e sempre corta o anterior (antes, os compassos se empilhavam).
@@ -451,14 +454,17 @@ function ligar() {
 
   $('regiao').addEventListener('change', e => {
     estado.rec.regiao = e.target.value; atualizar();
-    const msg = `Lugar: ${REGIOES[estado.rec.regiao].nome}. Os mesmos instrumentos, agora tocando os dados dessa região.`;
+    const msg = L(`Lugar: ${REGIOES[estado.rec.regiao].nome}. Os mesmos instrumentos, agora tocando os dados dessa região.`,
+      `Place: ${REGIOES[estado.rec.regiao].nome}. The same instruments, now playing this region's data.`);
     mudanca(msg); anunciar(msg);
   });
   const mudouPeriodo = () => {
     atualizar();
     const msg = retrato()
-      ? `Período: ${estado.rec.inicio} a ${estado.rec.fim}. O retrato agora é a média desses ${estado.passos.length} anos: ${textoValores(estado.media)}.`
-      : `Período: ${estado.rec.inicio} a ${estado.rec.fim}. Cada ano é um compasso: ${estado.passos.length} compassos, ${duracao()}.`;
+      ? L(`Período: ${estado.rec.inicio} a ${estado.rec.fim}. O retrato agora é a média desses ${estado.passos.length} anos: ${textoValores(estado.media)}.`,
+        `Period: ${estado.rec.inicio} to ${estado.rec.fim}. The portrait is now the average of these ${estado.passos.length} years: ${textoValores(estado.media)}.`)
+      : L(`Período: ${estado.rec.inicio} a ${estado.rec.fim}. Cada ano é um compasso: ${estado.passos.length} compassos, ${duracao()}.`,
+        `Period: ${estado.rec.inicio} to ${estado.rec.fim}. Each year is one bar: ${estado.passos.length} bars, ${duracao()}.`);
     mudanca(msg); anunciar(msg);
   };
   $('inicio').addEventListener('change', e => {
@@ -475,8 +481,8 @@ function ligar() {
   document.querySelectorAll('input[name="modo"]').forEach(r => r.addEventListener('change', e => {
     estado.modo = e.target.value; atualizar();
     const msg = retrato()
-      ? 'Modo retrato: o período inteiro vira uma música só, feita da média dos dados. Toca em loop.'
-      : 'Modo ano a ano: cada ano é um compasso, e você ouve a mudança ao longo do tempo.';
+      ? L('Modo retrato: o período inteiro vira uma música só, feita da média dos dados. Toca em loop.', 'Portrait mode: the whole period becomes one piece, made from the average of the data. It loops.')
+      : L('Modo ano a ano: cada ano é um compasso, e você ouve a mudança ao longo do tempo.', 'Year-by-year mode: each year is one bar, and you hear the change over time.');
     mudanca(msg); anunciar(msg);
   }));
 
@@ -484,15 +490,16 @@ function ligar() {
     estado.velocidade = +e.target.value;
     $('descricao').textContent = descricao(estado.rec, estado.passos, estado.conflito, segPorPasso());
     atualizar();
-    mudanca(`Velocidade: ${e.target.selectedOptions[0].text.toLowerCase()}.${retrato() ? '' : ` O disco agora dura ${duracao()}.`}`);
+    mudanca(L(`Velocidade: ${e.target.selectedOptions[0].text.toLowerCase()}.${retrato() ? '' : ` O disco agora dura ${duracao()}.`}`,
+      `Speed: ${e.target.selectedOptions[0].text.toLowerCase()}.${retrato() ? '' : ` The disc now lasts ${duracao()}.`}`));
   });
   $('descrever').addEventListener('click', () => {
     const p = estado.passos[estado.atual];
-    anunciar(descricao(estado.rec, estado.passos, estado.conflito, segPorPasso()) + (p ? ` Agora: ${p.rotulo}, ${textoValores(p.valores)}.` : ''));
+    anunciar(descricao(estado.rec, estado.passos, estado.conflito, segPorPasso()) + (p ? L(` Agora: ${p.rotulo}, ${textoValores(p.valores)}.`, ` Now: ${p.rotulo}, ${textoValores(p.valores)}.`) : ''));
   });
   $('compartilhar').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(location.href); anunciar('Link do disco copiado.'); }
-    catch { anunciar('Não deu para copiar. O link está na barra de endereço.'); }
+    try { await navigator.clipboard.writeText(location.href); anunciar(L('Link do disco copiado.', 'Link to the disc copied.')); }
+    catch { anunciar(L('Não deu para copiar. O link está na barra de endereço.', 'Could not copy. The link is in the address bar.')); }
   });
 
   const disco = $('disco');
@@ -556,6 +563,7 @@ function ligar() {
   });
 }
 
+aplicarIdioma();
 montar();
 lerDaURL();
 ligar();

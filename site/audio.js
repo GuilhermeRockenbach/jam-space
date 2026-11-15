@@ -18,6 +18,7 @@
    Nada é sorteado: mesma receita, mesma música.
    ===================================================================== */
 import { LIMIAR_MEDIA_GELO, limitar } from './dados.js';
+import { L } from './lingua.js';
 
 let ctx = null, entrada = null, reverb = null, envioEco = null, eco = null, bufRuido = null;
 // "Geração" de saída: tudo o que é agendado passa por ela. Para calar o que já foi
@@ -125,7 +126,8 @@ function montarAudio() {
 let an = null;
 export const analisador = () => an;
 export const monitor = { bpm: 0, acorde: '', tensao: 0, quando: 0 };
-const NOME_ACORDE = { I: 'Ré maior', ii: 'Mi menor', IV: 'Sol maior', V: 'Lá maior', vi: 'Si menor', bVI: 'Si♭ maior', bVII: 'Dó maior', iv: 'Sol menor' };
+const NOME_ACORDE = L({ I: 'Ré maior', ii: 'Mi menor', IV: 'Sol maior', V: 'Lá maior', vi: 'Si menor', bVI: 'Si♭ maior', bVII: 'Dó maior', iv: 'Sol menor' },
+  { I: 'D major', ii: 'E minor', IV: 'G major', V: 'A major', vi: 'B minor', bVI: 'B♭ major', bVII: 'C major', iv: 'G minor' });
 
 export function definirAndamento(segPorCompasso) {
   if (eco) eco.delayTime.setTargetAtTime(Math.min(1.9, (segPorCompasso / 4) * 0.75), ctx.currentTime, 0.05); // colcheia pontuada

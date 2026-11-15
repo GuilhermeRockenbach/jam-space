@@ -29,6 +29,7 @@ const MAX_CHUVA = 700, MAX_LUZES = 900, MAX_CALOR = 520, MAX_GEADA = 260, N_RAIO
 const LIMIAR_MEDIA_GELO = 0.5; // metade do maior mês lido no SVS 5099
 
 import { MAXIMO } from './dados.js';
+import { L } from './lingua.js';
 
 /* ---------- Planeta: máscara terra/mar (1°) e campos derivados ---------- */
 const MASC = await (await fetch('dados/mascara-terra.json')).json();
@@ -282,7 +283,7 @@ export function criarCena(palco, { reduzido }) {
     if (larg > maxArco) g.font = `600 ${Math.max(30, Math.floor(54 * maxArco / larg))}px Unbounded, system-ui, sans-serif`;
     textoCurvo(g, titulo, 420, false);
     g.font = '400 40px "Atkinson Hyperlegible", system-ui, sans-serif';
-    textoCurvo(g, 'Jam Space · dados NASA EIC', 410, true);
+    textoCurvo(g, L('Jam Space · dados NASA EIC', 'Jam Space · NASA EIC data'), 410, true);
     g.restore();
     texRotulo.needsUpdate = true;
   }

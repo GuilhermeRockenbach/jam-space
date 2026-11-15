@@ -5,18 +5,21 @@
    ===================================================================== */
 import { analisador, monitor, agora } from './audio.js';
 import { CAMADAS, ORDEM } from './dados.js';
+import { L, LOCALE } from './lingua.js';
 
 const F_MIN = 40, F_MAX = 12000, BARRAS = 72;
 const MARCAS = [50, 100, 250, 500, 1000, 2000, 5000, 10000];
 const FAIXAS = [ // onde cada tema toca (Hz), tirado dos registros usados em audio.js
-  { id: 'temp', de: 45, ate: 1200, papel: 'baixo, acordes e melodia' },
-  { id: 'luzes', de: 440, ate: 1400, papel: 'arpejo' },
-  { id: 'chuva', de: 650, ate: 2000, papel: 'garoa e gotas' },
-  { id: 'gelo', de: 520, ate: 4200, papel: 'sinos' },
-  { id: 'raios', de: 1500, ate: 9000, papel: 'caixa e chimbal' },
+  { id: 'temp', de: 45, ate: 1200, papel: L('baixo, acordes e melodia', 'bass, chords and melody') },
+  { id: 'luzes', de: 440, ate: 1400, papel: L('arpejo', 'arpeggio') },
+  { id: 'chuva', de: 650, ate: 2000, papel: L('garoa e gotas', 'drizzle and drops') },
+  { id: 'gelo', de: 520, ate: 4200, papel: L('sinos', 'bells') },
+  { id: 'raios', de: 1500, ate: 9000, papel: L('caixa e chimbal', 'snare and hi-hat') },
 ];
-const NOTAS = ['Dó', 'Dó♯', 'Ré', 'Ré♯', 'Mi', 'Fá', 'Fá♯', 'Sol', 'Sol♯', 'Lá', 'Lá♯', 'Si'];
-const TENSAO = ['serena', 'serena', 'calma', 'média', 'tensa', 'tensa', 'muito tensa'];
+const NOTAS = L(['Dó', 'Dó♯', 'Ré', 'Ré♯', 'Mi', 'Fá', 'Fá♯', 'Sol', 'Sol♯', 'Lá', 'Lá♯', 'Si'],
+  ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']);
+const TENSAO = L(['serena', 'serena', 'calma', 'média', 'tensa', 'tensa', 'muito tensa'],
+  ['serene', 'serene', 'calm', 'medium', 'tense', 'tense', 'very tense']);
 
 const $ = id => document.getElementById(id);
 const xDe = (f, w) => (Math.log(f / F_MIN) / Math.log(F_MAX / F_MIN)) * w;
@@ -41,7 +44,7 @@ function desenhar() {
   const hEsp = h - 16 - altFaixas; // espectro em cima, faixas dos temas, eixo embaixo
 
   // Fundo: grave, médio e agudo
-  const zonas = [[F_MIN, 250, 'Grave'], [250, 2000, 'Médio'], [2000, F_MAX, 'Agudo']];
+  const zonas = [[F_MIN, 250, L('Grave', 'Low')], [250, 2000, L('Médio', 'Mid')], [2000, F_MAX, L('Agudo', 'High')]];
   zonas.forEach(([a, b, nome], i) => {
     const x0 = xDe(a, w), x1 = xDe(b, w);
     g.fillStyle = i % 2 ? 'rgba(170,180,221,0.07)' : 'rgba(170,180,221,0.03)';
@@ -112,17 +115,17 @@ function atualizarLeituras(pico, db) {
   const ativo = tocando && monitor.bpm && agora() < monitor.quando + monitor.dur + 1;
   $('mon-bpm').textContent = ativo ? `${monitor.bpm} bpm` : '—';
   $('mon-acorde').textContent = ativo ? monitor.acorde : '—';
-  $('mon-tensao').textContent = ativo ? `${monitor.tensao} de 6 · ${TENSAO[monitor.tensao]}` : '—';
+  $('mon-tensao').textContent = ativo ? `${monitor.tensao} ${L('de', 'of')} 6 · ${TENSAO[monitor.tensao]}` : '—';
   $('mon-pico').textContent = pico && db > -60 ? `${Math.round(pico)} Hz · ${notaDe(pico)}` : '—';
   const nivel = Number.isFinite(db) ? Math.max(0, Math.min(1, (db + 60) / 54)) : 0;
   $('mon-nivel').style.width = `${Math.round(nivel * 100)}%`;
-  $('mon-db').textContent = Number.isFinite(db) && db > -60 ? `${Math.round(db)} dB` : 'silêncio';
+  $('mon-db').textContent = Number.isFinite(db) && db > -60 ? `${Math.round(db)} dB` : L('silêncio', 'silence');
   const lista = $('mon-temas');
   const html = ORDEM.filter(c => camadas.includes(c)).map(c => {
     const fx = FAIXAS.find(f => f.id === c);
-    const hz = v => (v >= 1000 ? `${(v / 1000).toLocaleString('pt-BR')} kHz` : `${v} Hz`);
-    return `<li style="--cor:${CAMADAS[c].cor}"><i></i>${CAMADAS[c].nome}: ${fx.papel}, ${hz(fx.de)} a ${hz(fx.ate)}</li>`;
-  }).join('') || '<li class="vazio">Coloque um tema no disco para ver a faixa de cada um.</li>';
+    const hz = v => (v >= 1000 ? `${(v / 1000).toLocaleString(LOCALE)} kHz` : `${v} Hz`);
+    return `<li style="--cor:${CAMADAS[c].cor}"><i></i>${CAMADAS[c].nome}: ${fx.papel}, ${hz(fx.de)} ${L('a', 'to')} ${hz(fx.ate)}</li>`;
+  }).join('') || `<li class="vazio">${L('Coloque um tema no disco para ver a faixa de cada um.', 'Put a layer on the disc to see the range of each one.')}</li>`;
   if (lista.innerHTML !== html) lista.innerHTML = html;
 }
 

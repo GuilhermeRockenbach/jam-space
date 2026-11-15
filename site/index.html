@@ -1,15 +1,23 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Jam Space</title>
-  <meta name="description" content="Componha com o planeta: escolha os dados, o lugar e o tempo, e ouça a música que a Terra faz.">
+  <!-- Idioma antes de pintar: ?lang= na URL, senão a última escolha; inglês é o padrão -->
+  <script>
+    (function () {
+      var l = null;
+      try { l = new URLSearchParams(location.search).get('lang') || localStorage.getItem('jam-lingua'); } catch (e) {}
+      document.documentElement.lang = l === 'pt' ? 'pt-BR' : 'en';
+    })();
+  </script>
+  <meta name="description" content="Componha com o planeta: escolha os dados, o lugar e o tempo, e ouça a música que a Terra faz." data-en="Compose with the planet: choose the data, the place and the time, and listen to the music the Earth makes.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Unbounded:wght@500;700&display=swap" rel="stylesheet">
   <link rel="icon" href="logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
   <script type="importmap">
   {
     "imports": {
@@ -23,52 +31,55 @@
   <div class="app">
     <header class="marca">
       <h1><img class="logo" src="logo.svg" alt="" width="40" height="40">Jam Space</h1>
-      <p class="sr-only">Música feita com dados do clima da NASA. Atalhos: teclas 1 a 5 ligam os temas, espaço toca e pausa, D descreve o disco, A abre "Aprenda a ouvir".</p>
+      <p class="sr-only"><span data-l="pt">Música feita com dados do clima da NASA. Atalhos: teclas 1 a 5 ligam os temas, espaço toca e pausa, D descreve o disco, A abre "Aprenda a ouvir".</span><span data-l="en">Music made from NASA climate data. Shortcuts: keys 1 to 5 toggle the layers, space plays and pauses, D describes the disc, A opens "Learn to listen".</span></p>
       <div class="botoes-topo">
+        <button id="trocar-lingua" class="botao-icone botao-lingua" type="button" aria-label="Mudar o idioma para inglês" data-aria-en="Switch language to Portuguese">
+          <span data-l="pt" lang="en" aria-hidden="true">EN</span><span data-l="en" lang="pt-BR" aria-hidden="true">PT</span>
+        </button>
         <button id="abrir-ouvir" class="botao-ouvir" type="button" aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9a5 5 0 0 1 10 0c0 3-3 4-3 7a3 3 0 0 1-5.5 1.6"/><path d="M10 9.5a2 2 0 0 1 4 0c0 1.2-1 1.6-1.4 2.4"/></svg>
-          <span>Aprenda a ouvir</span>
+          <span data-l="pt">Aprenda a ouvir</span><span data-l="en">Learn to listen</span>
         </button>
-        <button id="abrir-info" class="botao-icone" type="button" aria-haspopup="dialog" aria-label="Como funciona e referências">
+        <button id="abrir-info" class="botao-icone" type="button" aria-haspopup="dialog" aria-label="Como funciona e referências" data-aria-en="How it works and references">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r="0.6" fill="currentColor"/></svg>
         </button>
-        <button id="abrir-opcoes" class="botao-icone" type="button" aria-haspopup="dialog" aria-label="Acessibilidade e som">
+        <button id="abrir-opcoes" class="botao-icone" type="button" aria-haspopup="dialog" aria-label="Acessibilidade e som" data-aria-en="Accessibility and sound">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg>
         </button>
       </div>
     </header>
 
-    <section id="palco" class="palco" aria-label="Toca-discos">
+    <section id="palco" class="palco" aria-label="Toca-discos" data-aria-en="Record player">
       <canvas aria-hidden="true"></canvas>
-      <!-- Os quatro temas ficam em volta do disco: arraste para dentro ou toque para ligar -->
-      <div id="prateleira" class="prateleira" role="group" aria-label="Temas: toque ou arraste para dentro do disco"></div>
-      <p id="dica" class="dica" aria-hidden="true">Arraste um tema para dentro do disco</p>
+      <!-- Os temas ficam em volta do disco: arraste para dentro ou toque para ligar -->
+      <div id="prateleira" class="prateleira" role="group" aria-label="Temas: toque ou arraste para dentro do disco" data-aria-en="Layers: tap one or drag it onto the disc"></div>
+      <p id="dica" class="dica" aria-hidden="true"><span data-l="pt">Arraste um tema para dentro do disco</span><span data-l="en">Drag a layer onto the disc</span></p>
       <button id="play" class="play" type="button" disabled>
         <svg class="icone-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
         <svg class="icone-pausa" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>
       </button>
-      <p id="sem-3d" class="sem-3d" hidden>Seu navegador não mostra o disco em 3D, mas o som e todos os controles funcionam.</p>
+      <p id="sem-3d" class="sem-3d" hidden><span data-l="pt">Seu navegador não mostra o disco em 3D, mas o som e todos os controles funcionam.</span><span data-l="en">Your browser cannot show the 3D disc, but the sound and every control still work.</span></p>
     </section>
 
     <div class="painel">
       <section id="receita" class="receita" aria-labelledby="receita-titulo">
-        <h2 id="receita-titulo" class="receita-titulo">Disco vazio</h2>
-        <p id="receita-sub" class="receita-sub">A Terra também pode ser ouvida. Toque num tema ou arraste para o disco.</p>
+        <h2 id="receita-titulo" class="receita-titulo"></h2>
+        <p id="receita-sub" class="receita-sub"></p>
       </section>
 
-      <section class="tocando" aria-label="Tocando agora">
+      <section class="tocando" aria-label="Tocando agora" data-aria-en="Now playing">
         <div class="tocando-topo">
           <p id="ano" class="ano" aria-hidden="true"></p>
           <ul id="medidores" class="medidores" aria-hidden="true"></ul>
         </div>
-        <label for="linha" class="sr-only">Linha do tempo: use as setas para ouvir ano a ano</label>
+        <label for="linha" class="sr-only"><span data-l="pt">Linha do tempo: use as setas para ouvir ano a ano</span><span data-l="en">Timeline: use the arrow keys to listen year by year</span></label>
         <input type="range" id="linha" min="0" max="0" value="0" disabled>
         <div class="linha-chip">
           <button id="abrir-disco" class="chip-ajustes" type="button" aria-haspopup="dialog">
-            <span id="resumo-ajustes">Mundo · ano a ano</span>
+            <span id="resumo-ajustes"></span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>
           </button>
-          <button id="abrir-monitor" class="chip-ajustes chip-monitor" type="button" aria-expanded="false" aria-controls="monitor" aria-label="Monitor do som">
+          <button id="abrir-monitor" class="chip-ajustes chip-monitor" type="button" aria-expanded="false" aria-controls="monitor" aria-label="Monitor do som" data-aria-en="Sound monitor">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V14M8 20V8M12 20V11M16 20V5M20 20V13"/></svg>
             <span>Monitor</span>
           </button>
@@ -79,67 +90,75 @@
 
     <aside id="monitor" class="monitor" aria-labelledby="t-monitor">
       <div class="mon-topo">
-        <h2 id="t-monitor">Monitor do som</h2>
-        <button id="fechar-monitor" class="fechar mon-fechar" type="button">Fechar</button>
+        <h2 id="t-monitor"><span data-l="pt">Monitor do som</span><span data-l="en">Sound monitor</span></h2>
+        <button id="fechar-monitor" class="fechar mon-fechar" type="button"><span data-l="pt">Fechar</span><span data-l="en">Close</span></button>
       </div>
-      <p class="sr-only">Espectro de frequências ao vivo, do grave ao agudo, e a faixa de altura de cada tema no disco.</p>
+      <p class="sr-only"><span data-l="pt">Espectro de frequências ao vivo, do grave ao agudo, e a faixa de altura de cada tema no disco.</span><span data-l="en">Live frequency spectrum, from low to high, and the pitch range of each layer on the disc.</span></p>
       <canvas id="espectro" aria-hidden="true"></canvas>
       <ul id="mon-temas" class="mon-temas"></ul>
       <dl class="mon-leituras">
-        <div><dt>Andamento</dt><dd id="mon-bpm">—</dd></div>
-        <div><dt>Acorde</dt><dd id="mon-acorde">—</dd></div>
-        <div><dt>Tensão</dt><dd id="mon-tensao">—</dd></div>
-        <div><dt>Nota mais forte</dt><dd id="mon-pico">—</dd></div>
-        <div class="mon-volume"><dt>Volume</dt><dd><span class="mon-barra"><i id="mon-nivel"></i></span> <span id="mon-db">silêncio</span></dd></div>
+        <div><dt><span data-l="pt">Andamento</span><span data-l="en">Tempo</span></dt><dd id="mon-bpm">—</dd></div>
+        <div><dt><span data-l="pt">Acorde</span><span data-l="en">Chord</span></dt><dd id="mon-acorde">—</dd></div>
+        <div><dt><span data-l="pt">Tensão</span><span data-l="en">Tension</span></dt><dd id="mon-tensao">—</dd></div>
+        <div><dt><span data-l="pt">Nota mais forte</span><span data-l="en">Loudest note</span></dt><dd id="mon-pico">—</dd></div>
+        <div class="mon-volume"><dt>Volume</dt><dd><span class="mon-barra"><i id="mon-nivel"></i></span> <span id="mon-db">—</span></dd></div>
       </dl>
     </aside>
   </div>
 
   <dialog id="disco" class="opcoes" aria-labelledby="t-disco">
-    <h2 id="t-disco">Lugar e período</h2>
-    <label>Lugar <select id="regiao"></select></label>
+    <h2 id="t-disco"><span data-l="pt">Lugar e período</span><span data-l="en">Place and period</span></h2>
+    <label><span data-l="pt">Lugar</span><span data-l="en">Place</span> <select id="regiao"></select></label>
     <div class="ajustes">
-      <label>Do ano <select id="inicio" disabled></select></label>
-      <label>Até <select id="fim" disabled></select></label>
+      <label><span data-l="pt">Do ano</span><span data-l="en">From</span> <select id="inicio" disabled></select></label>
+      <label><span data-l="pt">Até</span><span data-l="en">To</span> <select id="fim" disabled></select></label>
     </div>
-    <div class="modo" role="radiogroup" aria-label="Como ouvir o período">
-      <label><input type="radio" name="modo" value="linha" checked> Ano a ano <span class="modo-ajuda">ouça a mudança</span></label>
-      <label><input type="radio" name="modo" value="retrato"> Retrato do período <span class="modo-ajuda">a média, em loop</span></label>
+    <div class="modo" role="radiogroup" aria-label="Como ouvir o período" data-aria-en="How to listen to the period">
+      <label><input type="radio" name="modo" value="linha" checked> <span data-l="pt">Ano a ano</span><span data-l="en">Year by year</span> <span class="modo-ajuda"><span data-l="pt">ouça a mudança</span><span data-l="en">hear the change</span></span></label>
+      <label><input type="radio" name="modo" value="retrato"> <span data-l="pt">Retrato do período</span><span data-l="en">Period portrait</span> <span class="modo-ajuda"><span data-l="pt">a média, em loop</span><span data-l="en">the average, looped</span></span></label>
     </div>
-    <p class="nota">Todos os temas são lidos dos pixels de visualizações da NASA (Earth Information Center).</p>
-    <button id="fechar-disco" class="fechar" type="button">Pronto</button>
+    <p class="nota"><span data-l="pt">Todos os temas são lidos dos pixels de visualizações da NASA (Earth Information Center).</span><span data-l="en">Every layer is read from the pixels of NASA visualizations (Earth Information Center).</span></p>
+    <button id="fechar-disco" class="fechar" type="button"><span data-l="pt">Pronto</span><span data-l="en">Done</span></button>
   </dialog>
 
   <dialog id="opcoes" class="opcoes" aria-labelledby="t-opcoes">
-    <h2 id="t-opcoes">Acessibilidade e som</h2>
+    <h2 id="t-opcoes"><span data-l="pt">Acessibilidade e som</span><span data-l="en">Accessibility and sound</span></h2>
     <p id="descricao" class="descricao"></p>
     <div class="linha-botoes">
-      <button id="descrever" type="button">Descrever o disco</button>
-      <button id="compartilhar" type="button">Copiar link do disco</button>
+      <button id="descrever" type="button"><span data-l="pt">Descrever o disco</span><span data-l="en">Describe the disc</span></button>
+      <button id="compartilhar" type="button"><span data-l="pt">Copiar link do disco</span><span data-l="en">Copy link to this disc</span></button>
     </div>
-    <label>Velocidade
+    <label><span data-l="pt">Velocidade</span><span data-l="en">Speed</span>
       <select id="velocidade">
-        <option value="0.5">Devagar</option>
-        <option value="1" selected>Normal</option>
-        <option value="2">Rápida</option>
+        <option value="0.5" data-en="Slow">Devagar</option>
+        <option value="1" selected data-en="Normal">Normal</option>
+        <option value="2" data-en="Fast">Rápida</option>
       </select>
     </label>
-    <label class="check"><input type="checkbox" id="voz"> Narrar com a voz do site (deixe desligado se você usa leitor de tela)</label>
-    <label class="check"><input type="checkbox" id="vibrar"> Vibrar com os raios (Android)</label>
-    <h3 class="atalhos-titulo">Atalhos de teclado</h3>
-    <ul class="atalhos">
+    <label class="check"><input type="checkbox" id="voz"> <span data-l="pt">Narrar com a voz do site (deixe desligado se você usa leitor de tela)</span><span data-l="en">Narrate with the site's voice (leave it off if you use a screen reader)</span></label>
+    <label class="check"><input type="checkbox" id="vibrar"> <span data-l="pt">Vibrar com os raios (Android)</span><span data-l="en">Vibrate with the lightning (Android)</span></label>
+    <h3 class="atalhos-titulo"><span data-l="pt">Atalhos de teclado</span><span data-l="en">Keyboard shortcuts</span></h3>
+    <ul class="atalhos" data-l="pt">
       <li><kbd>1</kbd> a <kbd>5</kbd> ligam e desligam Temperatura, Raios, Luzes, Gelo e Chuva</li>
       <li><kbd>Espaço</kbd> toca e pausa</li>
       <li><kbd>←</kbd> <kbd>→</kbd> na linha do tempo: ano anterior e seguinte</li>
       <li><kbd>D</kbd> descreve o disco em voz alta</li>
       <li><kbd>L</kbd> abre lugar e período; <kbd>I</kbd> abre "Ouvir a Terra"; <kbd>A</kbd> abre "Aprenda a ouvir"</li>
     </ul>
-    <p class="nota">Use as setas na linha do tempo para ouvir ano a ano. Todos os valores vêm da leitura dos pixels de visualizações da NASA: temperatura (SVS 5207), raios (5011), luzes (5313), chuva (5149) e gelo (5099).</p>
-    <button id="fechar-opcoes" class="fechar" type="button">Fechar</button>
+    <ul class="atalhos" data-l="en">
+      <li><kbd>1</kbd> to <kbd>5</kbd> turn Temperature, Lightning, Night lights, Sea ice and Rain on and off</li>
+      <li><kbd>Space</kbd> plays and pauses</li>
+      <li><kbd>←</kbd> <kbd>→</kbd> on the timeline: previous and next year</li>
+      <li><kbd>D</kbd> describes the disc out loud</li>
+      <li><kbd>L</kbd> opens place and period; <kbd>I</kbd> opens "Listen to the Earth"; <kbd>A</kbd> opens "Learn to listen"</li>
+    </ul>
+    <p class="nota"><span data-l="pt">Use as setas na linha do tempo para ouvir ano a ano. Todos os valores vêm da leitura dos pixels de visualizações da NASA: temperatura (SVS 5207), raios (5011), luzes (5313), chuva (5149) e gelo (5099).</span><span data-l="en">Use the arrow keys on the timeline to listen year by year. Every value comes from reading the pixels of NASA visualizations: temperature (SVS 5207), lightning (5011), night lights (5313), rain (5149) and sea ice (5099).</span></p>
+    <button id="fechar-opcoes" class="fechar" type="button"><span data-l="pt">Fechar</span><span data-l="en">Close</span></button>
   </dialog>
 
   <dialog id="info" class="opcoes info" aria-labelledby="t-info">
-    <h2 id="t-info" tabindex="-1" autofocus>Ouvir a Terra</h2>
+    <h2 id="t-info" tabindex="-1" autofocus><span data-l="pt">Ouvir a Terra</span><span data-l="en">Listen to the Earth</span></h2>
+    <div data-l="pt">
     <p>A NASA produz algumas das imagens mais impressionantes do planeta. Mas um mapa de calor que depende só da visão deixa de fora quem não enxerga. O Jam Space transforma esses mapas em música, para que a ciência da Terra possa ser ouvida e sentida por todo mundo.</p>
 
     <h3>Para quem</h3>
@@ -212,11 +231,88 @@
       <li>Todos os sons são sintetizados ao vivo; não usamos música gravada.</li>
       <li>Claude (Anthropic), via Claude Code, ajudou a planejar, pesquisar e escrever código e textos.</li>
     </ul>
-    <button id="fechar-info" class="fechar" type="button">Fechar</button>
+    </div>
+
+    <div data-l="en">
+    <p>NASA produces some of the most striking images of our planet. But a heat map that depends only on sight leaves out people who cannot see. Jam Space turns those maps into music, so that Earth science can be heard and felt by everyone.</p>
+
+    <h3>Who it is for</h3>
+    <ul>
+      <li><strong>Blind and low-vision people.</strong> Like Mateus, 24, who today has no access to climate charts. Everything on the site works from the keyboard and with a screen reader, and the music carries the whole message.</li>
+      <li><strong>Teachers and museums.</strong> Like Camila, 38, a teacher who wants to show global warming with more than one sense. A cold year and a hot year sound like different songs, and the class notices the change without reading a number.</li>
+    </ul>
+
+    <h3>UN Sustainable Development Goals</h3>
+    <ul>
+      <li><strong>SDG 10, reduced inequalities:</strong> space science that does not depend on sight. In Brazil, about 7.9 million people have a permanent difficulty seeing (IBGE census).</li>
+      <li><strong>SDG 4, quality education:</strong> multisensory learning in the classroom.</li>
+      <li><strong>SDG 13, climate action:</strong> spreadsheet numbers become emotion. Listening to 1910 and then to 2023 makes the urgency clear.</li>
+    </ul>
+
+    <h3>How the music is made</h3>
+    <p>There are two ways to listen. <strong>Year by year</strong>: each year (or month, for sea ice) becomes one bar, and you hear the change across the period. <strong>Period portrait</strong>: the site averages the data of the chosen period and plays a single piece in a loop. Use it to compare, for example, 1950–1960 with 2013–2023.</p>
+    <p>We use <strong>parameter-mapping sonification</strong>: each feature of the data controls one feature of the sound. The mappings were chosen from studies on how people interpret sound.</p>
+
+    <h3>What each dataset controls</h3>
+    <table>
+      <thead><tr><th scope="col">Data</th><th scope="col">What you hear</th><th scope="col">Why</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Temperature</th><td>Cold: slow music (70 beats per minute), low flute, serene chords, high wind and ice bells. Hot: fast (up to 140), high and rough cello, tense chords, full drums, cymbal and a low hum. At the hot extreme a two-note "siren" enters. In year-by-year mode, the coldest and the hottest year of the chosen period become the extremes of the music, so the difference is audible even when it is tenths of a degree; in portrait mode the absolute value is used, to compare periods.</td><td>Listeners link "more" with higher pitch: this is positive polarity (Walker, 2002; Walker &amp; Kramer, 2005). "One note per year, higher when hotter" follows Crawford's piece (2013) with NASA temperature data. The same value drives several aspects of the sound at once (tempo, pitch, timbre, density) so the extremes are clearly different (Grond &amp; Berger, 2011).</td></tr>
+        <tr><th scope="row">Arctic sea ice</th><td>Bells on the notes of the chord. Less ice, fewer bells. Below half of the largest month of the period, the bells drop and a continuous low drone enters. On its own, the ice moves month by month, from May 2021 to April 2023 (monthly mean of the ice area read from SVS 5099). Together with yearly layers, these 24 months loop, one per bar.</td><td>Quantity mapped to event density, one of the easiest mappings to perceive (Grond &amp; Berger, 2011).</td></tr>
+        <tr><th scope="row">Lightning</th><td>Snare on beats 2 and 4 and extra hits, always in time. More lightning, more hits.</td><td>Discrete events become short percussive sounds; the Euclidean distribution keeps the rhythm musical (Toussaint, 2005).</td></tr>
+        <tr><th scope="row">Rain</th><td>A soft drizzle in the background and drops: short notes of the chord, like drips in a gutter. More rain, more drops and a fuller drizzle. The drop pattern rotates every bar, like real rain. The value is the fraction of the area with rain in 24 snapshots of the GEOS-FP model (SVS 5149), from 29 October to 13 November 2026; together with yearly layers, they loop.</td><td>Quantity mapped to event density and to the volume of the background noise (Grond &amp; Berger, 2011).</td></tr>
+        <tr><th scope="row">Night lights</th><td>An arpeggio on the notes of the chord. More light, more notes.</td><td>Note density as a measure of intensity (Grond &amp; Berger, 2011).</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Why it sounds like music</h3>
+    <ul>
+      <li>Everything is in D major, and each instrument only plays notes of the current chord.</li>
+      <li>All five layers can play together: each has its own pitch range (bass at the bottom, melody in the middle, arpeggio and raindrops above, bells at the top), and each one gets quieter when others join.</li>
+      <li>Tension comes from chords borrowed from the minor mode (♭VI, ♭VII, iv), used when the data moves away from normal.</li>
+      <li>Nothing is random: the same recipe always makes the same music. When 2023 sounds tenser than 1980, that is the data speaking.</li>
+    </ul>
+
+    <h3>NASA data</h3>
+    <p>The visualizations below come from NASA's Scientific Visualization Studio, Earth Information Center collection. Credit: NASA's Scientific Visualization Studio. <strong>Temperature is read from the pixels of the SVS 5207 maps</strong>: for each year, the last frame; each colour converted to °C with the official scale (−2 to +2 °C) and averaged with area weights. We checked 2023: the reading gives +1.03 °C, like GISTEMP. The other layers are read the same way: <strong>lightning</strong> (SVS 5011, fraction of the area with lightning, mean of the year's 10-day windows; no data in the Arctic, outside the ISS orbit), <strong>night lights</strong> (SVS 5313, mean brightness over land, 2012–2023), <strong>rain</strong> (SVS 5149, fraction of the area with rain, from the official legend) and <strong>sea ice</strong> (SVS 5099, Arctic sea-ice area, mean of each month, shown as a fraction of the largest month). No value is made up.</p>
+    <ul class="refs">
+      <li>Global Temperature Anomalies 1880–2023, SVS 5207. Data: Robert B. Schmunk (NASA/GSFC GISS). <a href="https://svs.gsfc.nasa.gov/5207/" target="_blank" rel="noopener">svs.gsfc.nasa.gov/5207</a></li>
+      <li>Daily Polar Sea Ice, Two Year History, SVS 5099 (EIC Climate Vital Signs panel). <a href="https://svs.gsfc.nasa.gov/5099/" target="_blank" rel="noopener">svs.gsfc.nasa.gov/5099</a></li>
+      <li>Lightning Events from the ISS 2017–2023, SVS 5011. <a href="https://svs.gsfc.nasa.gov/5011/" target="_blank" rel="noopener">svs.gsfc.nasa.gov/5011</a></li>
+      <li>GEOS-FP Precipitation and Clouds, SVS 5149 (EIC Earth Now panel). NASA GMAO GEOS-FP model. <a href="https://svs.gsfc.nasa.gov/5149/" target="_blank" rel="noopener">svs.gsfc.nasa.gov/5149</a></li>
+      <li>Change in Night Lights 2012–2023, SVS 5313. Data: NASA Black Marble (Suomi NPP VIIRS); visualization: Kel Elkins. <a href="https://svs.gsfc.nasa.gov/5313/" target="_blank" rel="noopener">svs.gsfc.nasa.gov/5313</a></li>
+      <li>Earth Information Center, SVS gallery. <a href="https://svs.gsfc.nasa.gov/gallery/earth-information-center/" target="_blank" rel="noopener">svs.gsfc.nasa.gov/gallery/earth-information-center</a></li>
+    </ul>
+
+    <h3>Sonification studies</h3>
+    <ul class="refs">
+      <li>Hermann, T.; Hunt, A.; Neuhoff, J. G. (eds.). <cite>The Sonification Handbook</cite>. Berlin: Logos, 2011.</li>
+      <li>Grond, F.; Berger, J. Parameter Mapping Sonification. In: <cite>The Sonification Handbook</cite>, ch. 15, 2011.</li>
+      <li>Walker, B. N. Magnitude estimation of conceptual data dimensions for use in sonification. <cite>Journal of Experimental Psychology: Applied</cite>, 8(4), 2002.</li>
+      <li>Walker, B. N.; Kramer, G. Mappings and metaphors in auditory displays: an experimental assessment. <cite>ACM Transactions on Applied Perception</cite>, 2(4), 2005.</li>
+      <li>Crawford, D. <cite>A Song of Our Warming Planet</cite>. University of Minnesota, 2013 (cello piece with NASA GISS temperature data).</li>
+      <li>Toussaint, G. The Euclidean algorithm generates traditional musical rhythms. <cite>Proceedings of BRIDGES</cite>, 2005.</li>
+      <li>NASA Chandra, <cite>A Universe of Sound</cite>: a sonification example on SVS (Caldwell 73, SVS 13786).</li>
+    </ul>
+
+    <h3>Team</h3>
+    <p>Jam Space is a team from Rio Grande do Sul, Brazil, with a member from Colombia, formed at Tecnovates for the NASA Space Apps Challenge 2026 in Lajeado (RS).</p>
+
+    <h3>Code, fonts and AI</h3>
+    <ul class="refs">
+      <li>three.js 0.170 (MIT licence): 3D disc.</li>
+      <li>Web Audio API and Web Speech API (web standards): sound and narration.</li>
+      <li>Unbounded and Atkinson Hyperlegible fonts, from Google Fonts (SIL Open Font License). Atkinson Hyperlegible was created by the Braille Institute for people with low vision.</li>
+      <li>All sounds are synthesized live; no recorded music is used.</li>
+      <li>Claude (Anthropic), through Claude Code, helped plan, research and write code and texts.</li>
+    </ul>
+    </div>
+    <button id="fechar-info" class="fechar" type="button"><span data-l="pt">Fechar</span><span data-l="en">Close</span></button>
   </dialog>
 
   <dialog id="ouvir" class="opcoes info ouvir" aria-labelledby="t-ouvir">
-    <h2 id="t-ouvir" tabindex="-1" autofocus>Aprenda a ouvir</h2>
+    <h2 id="t-ouvir" tabindex="-1" autofocus><span data-l="pt">Aprenda a ouvir</span><span data-l="en">Learn to listen</span></h2>
+    <div data-l="pt">
     <p>A música do Jam Space é feita de poucos contrastes. Ouça cada par abaixo, um de cada vez. Depois, no disco, você vai reconhecer o que cada mudança quer dizer. Com fones de ouvido fica mais fácil.</p>
     <section class="licao">
       <h3>Grave e agudo</h3>
@@ -277,11 +373,75 @@
         <li><button type="button" data-amostra="gelo">▶ Gelo do Ártico</button> sinos, no ponto mais agudo.</li>
       </ul>
     </section>
-    <button id="fechar-ouvir" class="fechar" type="button">Fechar</button>
+    </div>
+
+    <div data-l="en">
+    <p>Jam Space's music is built from a few contrasts. Listen to each pair below, one at a time. Then, on the disc, you will recognise what each change means. Headphones make it easier.</p>
+    <section class="licao">
+      <h3>Low and high</h3>
+      <p><strong>High</strong> is a thin sound, like a whistle or a bird. <strong>Low</strong> is a thick sound, like thunder or a big drum. In Jam Space, <strong>higher means more</strong>: the hotter the year, the higher the melody. For sea ice, when it falls below half, the bells drop to the low register and a continuous low drone enters, like a warning.</p>
+      <div class="linha-botoes">
+        <button type="button" data-licao="grave">▶ Hear low</button>
+        <button type="button" data-licao="agudo">▶ Hear high</button>
+      </div>
+    </section>
+    <section class="licao">
+      <h3>Slow and fast</h3>
+      <p><strong>Tempo</strong> is the speed of the beat. Heat speeds the music up: a cold year plays at 70 beats per minute, a hot year reaches 140. If the music rushes, the planet got warmer.</p>
+      <div class="linha-botoes">
+        <button type="button" data-licao="lento">▶ Hear slow</button>
+        <button type="button" data-licao="rapido">▶ Hear fast</button>
+      </div>
+    </section>
+    <section class="licao">
+      <h3>Calm and tense</h3>
+      <p>A chord is a group of notes played together. Notes that fit sound <strong>calm</strong>, like the end of a song. Neighbouring notes that clash sound <strong>tense</strong>, like a suspense soundtrack. The hotter the year, the tenser the chords.</p>
+      <div class="linha-botoes">
+        <button type="button" data-licao="calmo">▶ Hear calm</button>
+        <button type="button" data-licao="tenso">▶ Hear tense</button>
+      </div>
+    </section>
+    <section class="licao">
+      <h3>Little and a lot</h3>
+      <p>Quantity becomes <strong>number of notes</strong>. More lightning, more percussion hits. More lights, more notes in the arpeggio. More rain, more drops. More ice, more bells. If the sound gets busy, there is a lot of it.</p>
+      <div class="linha-botoes">
+        <button type="button" data-licao="pouco">▶ Hear little</button>
+        <button type="button" data-licao="muito">▶ Hear a lot</button>
+      </div>
+    </section>
+    <section class="licao">
+      <h3>All together: cold year and hot year</h3>
+      <p>Now all the contrasts at once. The cold year is low, slow and calm. The hot year is high, fast and tense, with more drums and a pulsing low hum.</p>
+      <div class="linha-botoes">
+        <button type="button" data-licao="frio">▶ Hear a cold year</button>
+        <button type="button" data-licao="quente">▶ Hear a hot year</button>
+      </div>
+    </section>
+    <section class="licao">
+      <h3>Plenty of ice and little ice</h3>
+      <p>With plenty of ice, the bells ring high and many. Below half of the largest month, there are fewer bells, they drop, and a low drone enters.</p>
+      <div class="linha-botoes">
+        <button type="button" data-licao="gelocheio">▶ Hear plenty of ice</button>
+        <button type="button" data-licao="gelobaixo">▶ Hear little ice</button>
+      </div>
+    </section>
+    <section class="licao">
+      <h3>Who is who</h3>
+      <p>Each layer has its own instrument and pitch range, from low to high, so you can tell them apart when they play together.</p>
+      <ul class="quem">
+        <li><button type="button" data-amostra="temp">▶ Temperature</button> bass and chords, the base of the music, in the low and middle range.</li>
+        <li><button type="button" data-amostra="raios">▶ Lightning</button> percussion: snare and extra hits.</li>
+        <li><button type="button" data-amostra="luzes">▶ Night lights</button> piano arpeggio, above the melody.</li>
+        <li><button type="button" data-amostra="chuva">▶ Rain</button> background drizzle and short drops.</li>
+        <li><button type="button" data-amostra="gelo">▶ Arctic sea ice</button> bells, at the very top.</li>
+      </ul>
+    </section>
+    </div>
+    <button id="fechar-ouvir" class="fechar" type="button"><span data-l="pt">Fechar</span><span data-l="en">Close</span></button>
   </dialog>
 
   <div id="anuncio" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
-  <script type="module" src="app.js?v=5"></script>
+  <script type="module" src="app.js?v=6"></script>
 </body>
 </html>
