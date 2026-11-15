@@ -153,6 +153,9 @@ export function criarCena(palco, { reduzido }) {
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const p = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.09, map: sprite, color: 0x9fb2ff, transparent: true, opacity: 0.7, depthWrite: false }));
+    // No celular a tela é pequena e a resolução baixa: as estrelas viravam pontinhos soltos e
+    // borrados em volta do disco, parecendo sujeira. Lá o céu fica liso.
+    p.visible = !(reduzido || matchMedia('(pointer: coarse)').matches);
     cena.add(p);
     return p;
   })();
