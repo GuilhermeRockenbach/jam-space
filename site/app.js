@@ -60,7 +60,7 @@ function mediaDe(passos) {
 /* ---------- Cena 3D (com plano B se não houver WebGL) ---------- */
 let cena = null;
 try {
-  const { criarCena } = await import('./cena.js');
+  const { criarCena } = await import('./cena.js?v=3'); // ?v= força o celular a baixar a versão nova
   cena = criarCena($('palco'), { reduzido });
 } catch (e) {
   console.warn('3D indisponível:', e);
