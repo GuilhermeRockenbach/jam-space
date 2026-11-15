@@ -116,6 +116,19 @@ function texturaSprite() {
   return t;
 }
 
+// Luz sob o disco: textura própria, maior e sem mipmaps. A textura pequena dos pontos, esticada num
+// plano de 10×10 visto de lado, virava pontinhos coloridos no iPhone (ruído das mipmaps).
+function texturaHalo() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
 export function criarCena(palco, { reduzido }) {
   const canvas = palco.querySelector('canvas');
   // Celular/tablet: sem pós-processamento (brilho/bloom). Nos chips de celular (iPhone, por exemplo)
@@ -168,7 +181,7 @@ export function criarCena(palco, { reduzido }) {
   /* ---------- Halo sob o toca-discos ---------- */
   const halo = new THREE.Mesh(
     new THREE.PlaneGeometry(10, 10),
-    new THREE.MeshBasicMaterial({ map: sprite, color: 0x3657c9, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ map: texturaHalo(), color: 0x3657c9, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   halo.rotation.x = -Math.PI / 2; halo.position.y = -0.2;
   cena.add(halo);
